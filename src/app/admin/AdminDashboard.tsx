@@ -5,11 +5,14 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase-browser";
 import styles from "./admin.module.css";
 
+type ApplicationStatus = "pending" | "approved" | "declined";
+
 type Profile = {
   id: string;
   display_name: string;
   role: "admin" | "editor" | "contributor";
   is_active: boolean;
+  application_status: ApplicationStatus;
   created_at: string;
 };
 
@@ -75,7 +78,7 @@ export function AdminDashboard() {
 
     const { data: mine, error: profileError } = await supabase
       .from("profiles")
-      .select("id,display_name,role,is_active,created_at")
+      .select("id,display_name,role,is_active,application_status,created_at")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -94,7 +97,7 @@ export function AdminDashboard() {
     }
 
     const [{ data: p, error: peopleError }, { data: a, error: articlesError }] = await Promise.all([
-      supabase.from("profiles").select("id,display_name,role,is_active,created_at").order("created_at", { ascending: false }),
+      supabase.from("profiles").select("id,display_name,role,is_active,application_status,created_at").order("created_at", { ascending: false }),
       supabase.from("articles").select("id,author_id,title,slug,sport,scenario_type,status,submitted_at,scheduled_for,published_at,featured,updated_at").order("updated_at", { ascending: false }),
     ]);
 
@@ -119,25 +122,52 @@ export function AdminDashboard() {
   }
 
   const stats = useMemo(() => ({
-    pending: profiles.filter((p) => !p.is_active).length,
+    pending: profiles.filter((p) => p.application_status === "pending").length,
     review: articles.filter((a) => a.status === "in_review").length,
     scheduled: articles.filter((a) => a.status === "scheduled").length,
     published: articles.filter((a) => a.status === "published").length,
   }), [profiles, articles]);
 
-  async function logEvent(articleId: string, eventType: string, details: Record<string, unknown> = {}) {
-    if (!me) return;
-    await supabase.from("editorial_events").insert({ article_id: articleId, actor_id: me.id, event_type: eventType, details });
-  }
-
-  async function manageProfile(profile: Profile, patch: Partial<Pick<Profile, "role" | "is_active">>) {
+  async function manageProfile(
+    profile: Profile,
+    patch: Partial<Pick<Profile, "role" | "is_active" | "application_status">>,
+    successMessage = "Contributor access updated."
+  ) {
     if (me?.role !== "admin") return;
     setBusyId(profile.id);
     setMessage("");
     const { error } = await supabase.from("profiles").update(patch).eq("id", profile.id);
     setBusyId(null);
     if (error) setMessage(error.message);
-    else { setMessage("Contributor access updated."); await load(); }
+    else { setMessage(successMessage); await load(); }
+  }
+
+  async function deleteProfile(profile: Profile) {
+    if (me?.role !== "admin" || profile.id === me.id) return;
+    const confirmed = window.confirm(`Delete ${profile.display_name}'s Sports Rewritten profile? This cannot be undone.`);
+    if (!confirmed) return;
+
+    setBusyId(profile.id);
+    setMessage("");
+    const { error } = await supabase.from("profiles").delete().eq("id", profile.id);
+    setBusyId(null);
+
+    if (error) {
+      if (error.code === "23503") {
+        setMessage("This profile cannot be deleted because it is attached to articles, reviews, media, or editorial history. Deactivate it instead so the newsroom record remains intact.");
+      } else {
+        setMessage(error.message);
+      }
+      return;
+    }
+
+    setMessage("Profile deleted from the Sports Rewritten newsroom.");
+    await load();
+  }
+
+  async function logEvent(articleId: string, eventType: string, details: Record<string, unknown> = {}) {
+    if (!me) return;
+    await supabase.from("editorial_events").insert({ article_id: articleId, actor_id: me.id, event_type: eventType, details });
   }
 
   async function reviewArticle(article: Article, decision: "changes_requested" | "approved") {
@@ -185,6 +215,12 @@ export function AdminDashboard() {
     if (error) setMessage(error.message); else { setMessage(value ? "Article marked featured." : "Article removed from featured placement."); await load(); }
   }
 
+  function profileLabel(profile: Profile) {
+    if (profile.application_status === "pending") return "Pending";
+    if (profile.application_status === "declined") return "Declined";
+    return profile.is_active ? "Active" : "Inactive";
+  }
+
   if (loading) return <section className={`shell ${styles.shell}`}><div className={styles.accessCard}>Loading newsroom…</div></section>;
 
   if (!me) return <section className={`shell ${styles.shell}`}><div className={styles.accessCard}><p className="goldKicker">EDITORIAL ACCESS</p><h2>Sign in to the newsroom</h2><p>Use your Sports Rewritten account. Administrator and editor accounts can enter the Editorial Dashboard directly.</p><form onSubmit={signIn} style={{ display: "grid", gap: 12, marginTop: 20 }}><label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label><label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label><button className="redButton" disabled={authBusy}>{authBusy ? "Signing in…" : "Sign In to Editorial Dashboard"}</button></form>{message && <p className={styles.message}>{message}</p>}<p style={{ marginTop: 18 }}><Link href="/studio">Contributor Studio</Link></p></div></section>;
@@ -206,21 +242,31 @@ export function AdminDashboard() {
         <div><span>{stats.published}</span><small>Published</small></div>
       </div>
 
-      <div className={styles.sectionHeading}><div><p className="goldKicker">PEOPLE</p><h2>Contributor Management</h2></div><p>{me.role === "admin" ? "Approve writers, change roles, or deactivate access." : "Editors can view contributor status. Only administrators can change access."}</p></div>
+      <div className={styles.sectionHeading}><div><p className="goldKicker">PEOPLE</p><h2>Contributor Management</h2></div><p>{me.role === "admin" ? "Approve or decline applications, change roles, deactivate access, or delete eligible profiles." : "Editors can view contributor status. Only administrators can change access."}</p></div>
       <div className={styles.peopleGrid}>
-        {profiles.map((profile) => (
-          <article className={styles.personCard} key={profile.id}>
-            <div><h3>{profile.display_name}</h3><p>{profile.role}</p></div>
-            <span className={profile.is_active ? styles.active : styles.pending}>{profile.is_active ? "Active" : "Pending"}</span>
-            {me.role === "admin" && profile.id !== me.id && <div className={styles.personActions}>
-              {!profile.is_active && <button disabled={busyId === profile.id} onClick={() => void manageProfile(profile, { is_active: true })}>Approve</button>}
-              {profile.is_active && <button disabled={busyId === profile.id} onClick={() => void manageProfile(profile, { is_active: false })}>Deactivate</button>}
-              <select value={profile.role} disabled={busyId === profile.id} onChange={(e) => void manageProfile(profile, { role: e.target.value as Profile["role"] })}>
-                <option value="contributor">Contributor</option><option value="editor">Editor</option><option value="admin">Admin</option>
-              </select>
-            </div>}
-          </article>
-        ))}
+        {profiles.map((profile) => {
+          const label = profileLabel(profile);
+          const statusClass = label === "Active" ? styles.active : styles.pending;
+          return (
+            <article className={styles.personCard} key={profile.id}>
+              <div><h3>{profile.display_name}</h3><p>{profile.role}</p></div>
+              <span className={statusClass}>{label}</span>
+              {me.role === "admin" && profile.id !== me.id && <div className={styles.personActions}>
+                {profile.application_status === "pending" && <>
+                  <button disabled={busyId === profile.id} onClick={() => void manageProfile(profile, { is_active: true, application_status: "approved" }, "Contributor approved.")}>Approve</button>
+                  <button disabled={busyId === profile.id} onClick={() => void manageProfile(profile, { is_active: false, application_status: "declined" }, "Contributor application declined.")}>Decline</button>
+                </>}
+                {profile.application_status === "declined" && <button disabled={busyId === profile.id} onClick={() => void manageProfile(profile, { is_active: true, application_status: "approved" }, "Contributor approved.")}>Approve Instead</button>}
+                {profile.application_status === "approved" && profile.is_active && <button disabled={busyId === profile.id} onClick={() => void manageProfile(profile, { is_active: false }, "Contributor deactivated.")}>Deactivate</button>}
+                {profile.application_status === "approved" && !profile.is_active && <button disabled={busyId === profile.id} onClick={() => void manageProfile(profile, { is_active: true }, "Contributor reactivated.")}>Reactivate</button>}
+                <select value={profile.role} disabled={busyId === profile.id} onChange={(e) => void manageProfile(profile, { role: e.target.value as Profile["role"] }, "Contributor role updated.")}>
+                  <option value="contributor">Contributor</option><option value="editor">Editor</option><option value="admin">Admin</option>
+                </select>
+                <button disabled={busyId === profile.id} onClick={() => void deleteProfile(profile)}>Delete Profile</button>
+              </div>}
+            </article>
+          );
+        })}
       </div>
 
       <div className={styles.sectionHeading}><div><p className="goldKicker">PIPELINE</p><h2>Editorial Queue</h2></div><p>Review submitted stories and move approved work toward publication.</p></div>
