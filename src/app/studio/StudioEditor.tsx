@@ -1,236 +1,51 @@
 "use client";
 
-import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { supabase } from "@/lib/supabase-browser";
 import styles from "./studio.module.css";
 
-type Section = {
-  id: string;
-  heading: string;
-  body: string;
-  premium: boolean;
-};
+type Section = { id: string; heading: string; body: string; premium: boolean };
+type Draft = { articleId?:string; title:string; subtitle:string; slug:string; sport:string; scenarioType:string; tags:string; excerpt:string; heroAlt:string; heroFileName:string; heroUrl?:string; seoTitle:string; seoDescription:string; notes:string; status:"Draft"|"In Review"|"Changes Requested"; sections:Section[] };
+type Profile = { id:string; display_name:string; role:"admin"|"editor"|"contributor"; is_active:boolean };
 
-type Draft = {
-  title: string;
-  subtitle: string;
-  slug: string;
-  sport: string;
-  scenarioType: string;
-  tags: string;
-  excerpt: string;
-  heroAlt: string;
-  heroFileName: string;
-  seoTitle: string;
-  seoDescription: string;
-  notes: string;
-  status: "Draft" | "In Review";
-  sections: Section[];
-};
+const KEY="sports-rewritten-contributor-draft-v2";
+const initial:Draft={title:"",subtitle:"",slug:"",sport:"College Football",scenarioType:"Born in Another Era",tags:"",excerpt:"",heroAlt:"",heroFileName:"",seoTitle:"",seoDescription:"",notes:"",status:"Draft",sections:[{id:"s1",heading:"The Player We Actually Got",body:"",premium:false},{id:"s2",heading:"The Divergence",body:"",premium:false}]};
+const slugify=(v:string)=>v.toLowerCase().trim().replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"");
+const dbStatus=(s:Draft["status"])=>s==="In Review"?"in_review":s==="Changes Requested"?"changes_requested":"draft";
 
-const STORAGE_KEY = "sports-rewritten-contributor-draft-v1";
+export function StudioEditor(){
+ const [draft,setDraft]=useState<Draft>(initial); const [ready,setReady]=useState(false); const [savedAt,setSavedAt]=useState(""); const [preview,setPreview]=useState(false); const [hero,setHero]=useState(""); const [heroFile,setHeroFile]=useState<File|null>(null);
+ const [userId,setUserId]=useState<string|null>(null); const [profile,setProfile]=useState<Profile|null>(null); const [email,setEmail]=useState(""); const [password,setPassword]=useState(""); const [displayName,setDisplayName]=useState(""); const [authMode,setAuthMode]=useState<"signin"|"signup">("signin"); const [message,setMessage]=useState(""); const [busy,setBusy]=useState(false);
 
-const initialDraft: Draft = {
-  title: "",
-  subtitle: "",
-  slug: "",
-  sport: "College Football",
-  scenarioType: "Born in Another Era",
-  tags: "",
-  excerpt: "",
-  heroAlt: "",
-  heroFileName: "",
-  seoTitle: "",
-  seoDescription: "",
-  notes: "",
-  status: "Draft",
-  sections: [
-    { id: "section-1", heading: "The Player We Actually Got", body: "", premium: false },
-    { id: "section-2", heading: "The Divergence", body: "", premium: false },
-  ],
-};
+ useEffect(()=>{const s=localStorage.getItem(KEY); if(s){try{setDraft(JSON.parse(s))}catch{localStorage.removeItem(KEY)}} setReady(true); void syncSession(); const {data}=supabase.auth.onAuthStateChange(()=>{void syncSession()}); return()=>data.subscription.unsubscribe()},[]);
+ useEffect(()=>{if(!ready)return; const t=setTimeout(()=>{localStorage.setItem(KEY,JSON.stringify(draft)); setSavedAt(new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}))},450); return()=>clearTimeout(t)},[draft,ready]);
+ const words=useMemo(()=>[draft.title,draft.subtitle,draft.excerpt,...draft.sections.map(s=>s.body)].join(" ").trim().split(/\s+/).filter(Boolean).length,[draft]);
+ const field=<K extends keyof Draft>(k:K,v:Draft[K])=>setDraft(d=>({...d,[k]:v}));
+ const updateSection=(id:string,p:Partial<Section>)=>setDraft(d=>({...d,sections:d.sections.map(s=>s.id===id?{...s,...p}:s)}));
+ const add=()=>setDraft(d=>({...d,sections:[...d.sections,{id:crypto.randomUUID(),heading:"New Section",body:"",premium:true}]}));
 
-function slugify(value: string) {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
+ async function syncSession(){ const {data:{user}}=await supabase.auth.getUser(); setUserId(user?.id??null); if(!user){setProfile(null);return} const {data}=await supabase.from("profiles").select("id,display_name,role,is_active").eq("id",user.id).maybeSingle(); setProfile(data as Profile|null); }
+ async function handleAuth(e:FormEvent){e.preventDefault();setBusy(true);setMessage(""); if(authMode==="signup"){const {error}=await supabase.auth.signUp({email,password,options:{data:{display_name:displayName}}}); setMessage(error?error.message:"Account created. Check your email if confirmation is required. Contributor access remains pending until an editor approves your account.");} else {const {error}=await supabase.auth.signInWithPassword({email,password}); setMessage(error?error.message:"Signed in.");} setBusy(false); await syncSession();}
+ async function uploadHero(articleId:string){if(!heroFile||!userId)return draft.heroUrl??null; const ext=heroFile.name.split('.').pop()?.toLowerCase()||'jpg'; const path=`${userId}/${articleId}/hero-${Date.now()}.${ext}`; const {error}=await supabase.storage.from("article-media").upload(path,heroFile,{upsert:true}); if(error)throw error; return supabase.storage.from("article-media").getPublicUrl(path).data.publicUrl;}
+ async function saveCloud(nextStatus?:"draft"|"in_review"){
+  if(!userId||!profile?.is_active){setMessage("Your contributor account must be approved before cloud publishing tools are enabled.");return} if(!draft.title.trim()||!draft.slug.trim()){setMessage("Add a headline and slug first.");return} setBusy(true);setMessage("");
+  try{const payload={author_id:userId,title:draft.title,slug:draft.slug,subtitle:draft.subtitle||null,excerpt:draft.excerpt||null,sport:draft.sport,scenario_type:draft.scenarioType,status:nextStatus??dbStatus(draft.status),access_level:"premium",estimated_read_time:Math.max(1,Math.ceil(words/225)),seo_title:draft.seoTitle||null,seo_description:draft.seoDescription||null,hero_image_alt:draft.heroAlt||null,editor_notes:draft.notes||null,submitted_at:nextStatus==="in_review"?new Date().toISOString():null}; let articleId=draft.articleId;
+   if(articleId){const {error}=await supabase.from("articles").update(payload).eq("id",articleId); if(error)throw error;} else {const {data,error}=await supabase.from("articles").insert(payload).select("id").single(); if(error)throw error; articleId=data.id;}
+   const heroUrl=await uploadHero(articleId!); if(heroUrl){const {error}=await supabase.from("articles").update({hero_image_url:heroUrl}).eq("id",articleId); if(error)throw error;}
+   const {error:delErr}=await supabase.from("article_sections").delete().eq("article_id",articleId); if(delErr)throw delErr; const rows=draft.sections.map((s,i)=>({article_id:articleId,heading:s.heading,body:s.body,is_premium:s.premium,display_order:i,section_type:"standard"})); if(rows.length){const {error}=await supabase.from("article_sections").insert(rows); if(error)throw error;}
+   setDraft(d=>({...d,articleId,heroUrl:heroUrl??d.heroUrl,status:nextStatus==="in_review"?"In Review":d.status})); setSavedAt("cloud saved"); setMessage(nextStatus==="in_review"?"Article submitted for editorial review.":"Draft saved to Sports Rewritten cloud storage.");
+  }catch(err){setMessage(err instanceof Error?err.message:"Unable to save draft.");} finally{setBusy(false)} }
+ async function submit(){if(!draft.title.trim()||!draft.excerpt.trim()||draft.sections.some(s=>!s.body.trim())){setMessage("Add a headline, excerpt, and content to every section before submitting for review.");return} await saveCloud("in_review")}
 
-export function StudioEditor() {
-  const [draft, setDraft] = useState<Draft>(initialDraft);
-  const [ready, setReady] = useState(false);
-  const [savedAt, setSavedAt] = useState<string>("");
-  const [heroPreview, setHeroPreview] = useState<string>("");
-  const [previewMode, setPreviewMode] = useState(false);
+ if(!userId)return <section className={`shell ${styles.studioShell}`}><div className={styles.authCard}><p className="goldKicker">CONTRIBUTOR ACCESS</p><h2>{authMode==="signin"?"Sign in to Contributor Studio":"Request contributor access"}</h2><p>Approved contributors can save cloud drafts, upload hero images, preview stories, and submit work for editorial review.</p><form onSubmit={handleAuth}>{authMode==="signup"&&<label>Display name<input value={displayName} onChange={e=>setDisplayName(e.target.value)} required/></label>}<label>Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required/></label><label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} minLength={8} required/></label><button className="redButton" disabled={busy}>{busy?"Working…":authMode==="signin"?"Sign In":"Create Account"}</button></form><button className={styles.textButton} type="button" onClick={()=>setAuthMode(authMode==="signin"?"signup":"signin")}>{authMode==="signin"?"Need contributor access? Create an account":"Already have an account? Sign in"}</button>{message&&<p className={styles.message}>{message}</p>}</div></section>;
+ if(profile&&!profile.is_active)return <section className={`shell ${styles.studioShell}`}><div className={styles.authCard}><p className="goldKicker">ACCOUNT PENDING</p><h2>Contributor approval required</h2><p>Your account exists, but an editor must approve it before you can save or submit Sports Rewritten articles.</p><button className="outlineButton" onClick={()=>supabase.auth.signOut()}>Sign Out</button></div></section>;
 
-  useEffect(() => {
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try {
-        setDraft(JSON.parse(stored));
-      } catch {
-        window.localStorage.removeItem(STORAGE_KEY);
-      }
-    }
-    setReady(true);
-  }, []);
-
-  useEffect(() => {
-    if (!ready) return;
-    const timer = window.setTimeout(() => {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
-      setSavedAt(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
-    }, 450);
-    return () => window.clearTimeout(timer);
-  }, [draft, ready]);
-
-  const wordCount = useMemo(() => {
-    const text = [draft.title, draft.subtitle, draft.excerpt, ...draft.sections.map((s) => s.body)].join(" ");
-    return text.trim() ? text.trim().split(/\s+/).length : 0;
-  }, [draft]);
-
-  const readingMinutes = Math.max(1, Math.ceil(wordCount / 225));
-
-  function updateField<K extends keyof Draft>(key: K, value: Draft[K]) {
-    setDraft((current) => ({ ...current, [key]: value }));
-  }
-
-  function updateTitle(value: string) {
-    setDraft((current) => ({
-      ...current,
-      title: value,
-      slug: current.slug && current.slug !== slugify(current.title) ? current.slug : slugify(value),
-      seoTitle: current.seoTitle || value,
-    }));
-  }
-
-  function updateSection(id: string, patch: Partial<Section>) {
-    setDraft((current) => ({
-      ...current,
-      sections: current.sections.map((section) => section.id === id ? { ...section, ...patch } : section),
-    }));
-  }
-
-  function addSection() {
-    setDraft((current) => ({
-      ...current,
-      sections: [
-        ...current.sections,
-        { id: `section-${Date.now()}`, heading: "New Section", body: "", premium: true },
-      ],
-    }));
-  }
-
-  function removeSection(id: string) {
-    setDraft((current) => ({ ...current, sections: current.sections.filter((section) => section.id !== id) }));
-  }
-
-  function handleHero(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (heroPreview) URL.revokeObjectURL(heroPreview);
-    setHeroPreview(URL.createObjectURL(file));
-    updateField("heroFileName", file.name);
-  }
-
-  function saveNow() {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
-    setSavedAt(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
-  }
-
-  function submitForReview() {
-    if (!draft.title.trim() || !draft.excerpt.trim() || draft.sections.some((section) => !section.body.trim())) {
-      window.alert("Add a headline, excerpt, and content to every section before submitting for review.");
-      return;
-    }
-    setDraft((current) => ({ ...current, status: "In Review" }));
-  }
-
-  return (
-    <section className={`shell ${styles.studioShell}`}>
-      <div className={styles.statusBar}>
-        <div>
-          <span className={styles.status}>{draft.status}</span>
-          <span>{savedAt ? `Saved ${savedAt}` : "Autosave ready"}</span>
-          <span>{wordCount.toLocaleString()} words</span>
-          <span>{readingMinutes} min read</span>
-        </div>
-        <p>Studio preview mode. Drafts currently save only on this device until the Sports Rewritten editorial backend is connected.</p>
-      </div>
-
-      <div className={styles.toolbar}>
-        <button type="button" className="outlineButton" onClick={saveNow}>Save Draft</button>
-        <button type="button" className="outlineButton" onClick={() => setPreviewMode((value) => !value)}>{previewMode ? "Edit Article" : "Preview Article"}</button>
-        <button type="button" className="redButton" onClick={submitForReview}>Submit for Review</button>
-      </div>
-
-      {previewMode ? (
-        <article className={styles.preview}>
-          <p className="eyebrow">{draft.sport.toUpperCase()} • {draft.scenarioType.toUpperCase()}</p>
-          <h1>{draft.title || "Untitled Sports Rewritten Story"}</h1>
-          <p className={styles.previewSubtitle}>{draft.subtitle || "Add a subtitle to frame the alternate timeline."}</p>
-          {heroPreview ? <img src={heroPreview} alt={draft.heroAlt || "Draft hero preview"} className={styles.previewHero} /> : <div className={styles.heroPlaceholder}>HERO IMAGE PREVIEW</div>}
-          <p className={styles.previewExcerpt}>{draft.excerpt || "Your article excerpt will appear here."}</p>
-          {draft.sections.map((section, index) => (
-            <section className={styles.previewSection} key={section.id}>
-              <span>{String(index + 1).padStart(2, "0")}</span>
-              <div>
-                <div className={styles.sectionHeadingRow}><h2>{section.heading || "Untitled Section"}</h2>{section.premium && <small>PREMIUM</small>}</div>
-                <p>{section.body || "Section copy will appear here."}</p>
-              </div>
-            </section>
-          ))}
-        </article>
-      ) : (
-        <div className={styles.editorGrid}>
-          <div className={styles.editorMain}>
-            <div className={styles.card}>
-              <p className="goldKicker">STORY BASICS</p>
-              <label>Headline<input value={draft.title} onChange={(event) => updateTitle(event.target.value)} placeholder="What If..." /></label>
-              <label>Subtitle / Deck<textarea rows={3} value={draft.subtitle} onChange={(event) => updateField("subtitle", event.target.value)} /></label>
-              <div className={styles.twoColumns}>
-                <label>Sport<select value={draft.sport} onChange={(event) => updateField("sport", event.target.value)}><option>College Football</option><option>NFL</option><option>NBA</option><option>College Basketball</option><option>MLB</option><option>Boxing</option><option>Other Sports</option></select></label>
-                <label>Scenario Type<select value={draft.scenarioType} onChange={(event) => updateField("scenarioType", event.target.value)}><option>Born in Another Era</option><option>Draft What If</option><option>Trade What If</option><option>Injury What If</option><option>Recruiting What If</option><option>Coaching What If</option><option>Careers Rewritten</option><option>Dynasty</option><option>Game Rewritten</option></select></label>
-              </div>
-              <label>Slug<input value={draft.slug} onChange={(event) => updateField("slug", slugify(event.target.value))} /></label>
-              <label>Tags<input value={draft.tags} onChange={(event) => updateField("tags", event.target.value)} placeholder="Joe Hamilton, Georgia Tech, NFL Draft" /></label>
-              <label>Article Excerpt<textarea rows={4} value={draft.excerpt} onChange={(event) => updateField("excerpt", event.target.value)} /></label>
-            </div>
-
-            <div className={styles.card}>
-              <div className={styles.cardHeading}><div><p className="goldKicker">ARTICLE BODY</p><h2>Timeline Sections</h2></div><button type="button" className="outlineButton" onClick={addSection}>+ Add Section</button></div>
-              <div className={styles.sections}>
-                {draft.sections.map((section, index) => (
-                  <div className={styles.sectionEditor} key={section.id}>
-                    <div className={styles.sectionTop}><strong>{String(index + 1).padStart(2, "0")}</strong><input value={section.heading} onChange={(event) => updateSection(section.id, { heading: event.target.value })} aria-label={`Section ${index + 1} heading`} /><label className={styles.check}><input type="checkbox" checked={section.premium} onChange={(event) => updateSection(section.id, { premium: event.target.checked })} /> Premium</label>{draft.sections.length > 1 && <button type="button" onClick={() => removeSection(section.id)}>Remove</button>}</div>
-                    <textarea rows={10} value={section.body} onChange={(event) => updateSection(section.id, { body: event.target.value })} placeholder="Write this section of the Sports Rewritten timeline..." />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <aside className={styles.editorRail}>
-            <div className={styles.card}>
-              <p className="goldKicker">HERO ART</p>
-              <label className={styles.uploadBox}>Choose hero image<input type="file" accept="image/png,image/jpeg,image/webp" onChange={handleHero} /></label>
-              {heroPreview && <img src={heroPreview} className={styles.railImage} alt="Hero image preview" />}
-              <small>{draft.heroFileName || "PNG, JPEG, or WebP. Final published hero art should be at least 1200px wide."}</small>
-              <label>Image Alt Text<textarea rows={3} value={draft.heroAlt} onChange={(event) => updateField("heroAlt", event.target.value)} /></label>
-            </div>
-            <div className={styles.card}>
-              <p className="goldKicker">SEARCH & DISCOVERY</p>
-              <label>SEO Title<input value={draft.seoTitle} onChange={(event) => updateField("seoTitle", event.target.value)} /></label>
-              <label>SEO Description<textarea rows={4} value={draft.seoDescription} onChange={(event) => updateField("seoDescription", event.target.value)} /></label>
-            </div>
-            <div className={styles.card}>
-              <p className="goldKicker">EDITOR NOTES</p>
-              <label>Private Notes<textarea rows={6} value={draft.notes} onChange={(event) => updateField("notes", event.target.value)} placeholder="Sources to verify, simulation assumptions, art requests, questions for the editor..." /></label>
-            </div>
-          </aside>
-        </div>
-      )}
-    </section>
-  );
+ return <section className={`shell ${styles.studioShell}`}>
+  <div className={styles.statusBar}><div><span className={styles.status}>{draft.status}</span><span>{savedAt?`Saved ${savedAt}`:"Cloud save ready"}</span><span>{words} words</span><span>{Math.max(1,Math.ceil(words/225))} min read</span></div><p>{profile?.display_name} • {profile?.role}</p></div>{message&&<p className={styles.message}>{message}</p>}
+  <div className={styles.toolbar}><button className="outlineButton" type="button" disabled={busy||draft.status==="In Review"} onClick={()=>void saveCloud()}>{busy?"Saving…":"Save Cloud Draft"}</button><button className="outlineButton" type="button" onClick={()=>setPreview(v=>!v)}>{preview?"Edit Article":"Preview Article"}</button><button className="redButton" type="button" disabled={busy||draft.status==="In Review"} onClick={()=>void submit()}>Submit for Review</button><button className={styles.textButton} type="button" onClick={()=>supabase.auth.signOut()}>Sign Out</button></div>
+  {preview?<article className={styles.preview}><p className="eyebrow">{draft.sport.toUpperCase()} • {draft.scenarioType.toUpperCase()}</p><h1>{draft.title||"Untitled Sports Rewritten Story"}</h1><p className={styles.previewSubtitle}>{draft.subtitle||"Add a subtitle to frame the alternate timeline."}</p>{hero||draft.heroUrl?<img className={styles.previewHero} src={hero||draft.heroUrl} alt={draft.heroAlt||"Draft hero preview"}/>:<div className={styles.heroPlaceholder}>HERO IMAGE PREVIEW</div>}<p className={styles.previewExcerpt}>{draft.excerpt||"Your article excerpt will appear here."}</p>{draft.sections.map((s,i)=><section className={styles.previewSection} key={s.id}><span>{String(i+1).padStart(2,"0")}</span><div><div className={styles.sectionHeadingRow}><h2>{s.heading}</h2>{s.premium&&<small>PREMIUM</small>}</div><p>{s.body||"Section copy will appear here."}</p></div></section>)}</article>:
+  <div className={styles.editorGrid}><div className={styles.editorMain}><div className={styles.card}><p className="goldKicker">STORY BASICS</p><label>Headline<input value={draft.title} disabled={draft.status==="In Review"} onChange={e=>setDraft(d=>({...d,title:e.target.value,slug:d.slug&&d.slug!==slugify(d.title)?d.slug:slugify(e.target.value),seoTitle:d.seoTitle||e.target.value}))}/></label><label>Subtitle / Deck<textarea rows={3} value={draft.subtitle} disabled={draft.status==="In Review"} onChange={e=>field("subtitle",e.target.value)}/></label><div className={styles.twoColumns}><label>Sport<select value={draft.sport} disabled={draft.status==="In Review"} onChange={e=>field("sport",e.target.value)}>{["College Football","NFL","NBA","College Basketball","MLB","Boxing","Other Sports"].map(x=><option key={x}>{x}</option>)}</select></label><label>Scenario Type<select value={draft.scenarioType} disabled={draft.status==="In Review"} onChange={e=>field("scenarioType",e.target.value)}>{["Born in Another Era","Draft What If","Trade What If","Injury What If","Recruiting What If","Coaching What If","Careers Rewritten","Dynasty","Game Rewritten"].map(x=><option key={x}>{x}</option>)}</select></label></div><label>Slug<input value={draft.slug} disabled={draft.status==="In Review"} onChange={e=>field("slug",slugify(e.target.value))}/></label><label>Tags<input value={draft.tags} disabled={draft.status==="In Review"} onChange={e=>field("tags",e.target.value)} placeholder="Joe Hamilton, Georgia Tech, NFL Draft"/></label><label>Article Excerpt<textarea rows={4} value={draft.excerpt} disabled={draft.status==="In Review"} onChange={e=>field("excerpt",e.target.value)}/></label></div>
+  <div className={styles.card}><div className={styles.cardHeading}><div><p className="goldKicker">ARTICLE BODY</p><h2>Timeline Sections</h2></div><button type="button" className="outlineButton" disabled={draft.status==="In Review"} onClick={add}>+ Add Section</button></div><div className={styles.sections}>{draft.sections.map((s,i)=><div className={styles.sectionEditor} key={s.id}><div className={styles.sectionTop}><strong>{String(i+1).padStart(2,"0")}</strong><input value={s.heading} disabled={draft.status==="In Review"} onChange={e=>updateSection(s.id,{heading:e.target.value})}/><label className={styles.check}><input type="checkbox" checked={s.premium} disabled={draft.status==="In Review"} onChange={e=>updateSection(s.id,{premium:e.target.checked})}/> Premium</label>{draft.sections.length>1&&<button type="button" disabled={draft.status==="In Review"} onClick={()=>setDraft(d=>({...d,sections:d.sections.filter(x=>x.id!==s.id)}))}>Remove</button>}</div><textarea rows={10} value={s.body} disabled={draft.status==="In Review"} onChange={e=>updateSection(s.id,{body:e.target.value})}/></div>)}</div></div></div>
+  <aside className={styles.editorRail}><div className={styles.card}><p className="goldKicker">HERO ART</p><label className={styles.uploadBox}>Choose hero image<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled={draft.status==="In Review"} onChange={e=>{const f=e.target.files?.[0]; if(!f)return; setHeroFile(f); setHero(URL.createObjectURL(f)); field("heroFileName",f.name)}}/></label>{(hero||draft.heroUrl)&&<img src={hero||draft.heroUrl} className={styles.railImage} alt="Hero image preview"/>}<small>{draft.heroFileName||"PNG, JPEG, WebP, or GIF. Maximum 10 MB."}</small><label>Image Alt Text<textarea rows={3} value={draft.heroAlt} disabled={draft.status==="In Review"} onChange={e=>field("heroAlt",e.target.value)}/></label></div><div className={styles.card}><p className="goldKicker">SEARCH & DISCOVERY</p><label>SEO Title<input value={draft.seoTitle} disabled={draft.status==="In Review"} onChange={e=>field("seoTitle",e.target.value)}/></label><label>SEO Description<textarea rows={4} value={draft.seoDescription} disabled={draft.status==="In Review"} onChange={e=>field("seoDescription",e.target.value)}/></label></div><div className={styles.card}><p className="goldKicker">EDITOR NOTES</p><label>Private Notes<textarea rows={6} value={draft.notes} disabled={draft.status==="In Review"} onChange={e=>field("notes",e.target.value)}/></label></div></aside></div>}
+ </section>
 }
