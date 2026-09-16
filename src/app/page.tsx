@@ -4,6 +4,9 @@ import { Footer } from "@/components/Footer";
 import { articles as prototypeArticles, sports } from "@/lib/content";
 import { articleHref, createPublicSupabaseClient } from "@/lib/supabase-public";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type PublishedArticle = {
   id:string; title:string; slug:string; sport:string; scenario_type:string; excerpt:string|null;
   estimated_read_time:number|null; featured:boolean; published_at:string|null; hero_image_url:string|null;
