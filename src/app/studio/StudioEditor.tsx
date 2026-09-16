@@ -22,13 +22,13 @@ export function StudioEditor(){
 
  useEffect(()=>{const s=localStorage.getItem(KEY); if(s){try{setDraft(JSON.parse(s))}catch{localStorage.removeItem(KEY)}} setReady(true); void syncSession(); const {data}=supabase.auth.onAuthStateChange(()=>{void syncSession()}); return()=>data.subscription.unsubscribe()},[]);
  useEffect(()=>{if(!ready)return; const t=setTimeout(()=>{localStorage.setItem(KEY,JSON.stringify(draft)); setSavedAt(new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}))},450); return()=>clearTimeout(t)},[draft,ready]);
- useEffect(()=>{if(!userId||!profile||loadedTarget)return; const id=new URLSearchParams(window.location.search).get("article"); if(id) void loadArticle(id); else setLoadedTarget(true)},[userId,profile,loadedTarget]);
+ useEffect(()=>{if(!userId||!profile||loadedTarget)return; const id=new URLSearchParams(window.location.search).get("article"); if(id) void loadArticle(id); else {setDraft(d=>d.articleId?{...initial}:({...d,status:"Draft",editorFeedback:""})); setLoadedTarget(true)}},[userId,profile,loadedTarget]);
  const words=useMemo(()=>[draft.title,draft.subtitle,draft.excerpt,...draft.sections.map(s=>s.body)].join(" ").trim().split(/\s+/).filter(Boolean).length,[draft]);
  const field=<K extends keyof Draft>(k:K,v:Draft[K])=>setDraft(d=>({...d,[k]:v}));
  const updateSection=(id:string,p:Partial<Section>)=>setDraft(d=>({...d,sections:d.sections.map(s=>s.id===id?{...s,...p}:s)}));
  const add=()=>setDraft(d=>({...d,sections:[...d.sections,{id:crypto.randomUUID(),heading:"New Section",body:"",premium:true}]}));
  const isStaff=profile?.role==="admin"||profile?.role==="editor";
- const canEdit=!!profile?.is_active&&(isStaff||draft.status==="Draft"||draft.status==="Changes Requested");
+ const canEdit=!!profile?.is_active&&(isStaff||!draft.articleId||draft.status==="Draft"||draft.status==="Changes Requested");
 
  async function syncSession(){ const {data:{user}}=await supabase.auth.getUser(); setUserId(user?.id??null); if(!user){setProfile(null);setLoadedTarget(false);return} const {data}=await supabase.from("profiles").select("id,display_name,role,is_active,application_status").eq("id",user.id).maybeSingle(); setProfile(data as Profile|null); }
  async function handleAuth(e:FormEvent){e.preventDefault();setBusy(true);setMessage(""); if(authMode==="signup"){const {error}=await supabase.auth.signUp({email,password,options:{data:{display_name:displayName}}}); setMessage(error?error.message:"Account created. Check your email if confirmation is required. Contributor access remains pending until an editor approves your account.");} else {const {error}=await supabase.auth.signInWithPassword({email,password}); setMessage(error?error.message:"Signed in.");} setBusy(false); await syncSession();}
@@ -45,15 +45,34 @@ export function StudioEditor(){
 
  async function uploadHero(articleId:string){if(!heroFile||!userId)return draft.heroUrl??null; const ext=heroFile.name.split('.').pop()?.toLowerCase()||'jpg'; const path=`${userId}/${articleId}/hero-${Date.now()}.${ext}`; const {error}=await supabase.storage.from("article-media").upload(path,heroFile,{upsert:true}); if(error)throw error; return supabase.storage.from("article-media").getPublicUrl(path).data.publicUrl;}
  async function saveCloud(nextStatus?:"draft"|"in_review"){
-  if(!userId||!profile?.is_active){setMessage("Your contributor account must be approved before cloud publishing tools are enabled.");return} if(!draft.title.trim()||!draft.slug.trim()){setMessage("Add a headline and slug first.");return} if(!canEdit){setMessage("This article is locked at its current editorial status.");return} setBusy(true);setMessage("");
+  if(!userId||!profile?.is_active){setMessage("Your contributor account must be approved before cloud publishing tools are enabled.");return}
+  if(!draft.title.trim()||!draft.slug.trim()){setMessage("Add a headline and slug first.");return}
+  if(!canEdit){setMessage("This article is locked at its current editorial status.");return}
+  setBusy(true);setMessage("");
   try{
-   const intendedStatus=nextStatus??dbStatus(draft.status);
-   const payload={author_id:userId,author_name:profile.display_name,title:draft.title,slug:draft.slug,subtitle:draft.subtitle||null,excerpt:draft.excerpt||null,sport:draft.sport,scenario_type:draft.scenarioType,status:intendedStatus,access_level:"premium",estimated_read_time:Math.max(1,Math.ceil(words/225)),seo_title:draft.seoTitle||null,seo_description:draft.seoDescription||null,hero_image_alt:draft.heroAlt||null,submitted_at:nextStatus==="in_review"?new Date().toISOString():undefined}; let articleId=draft.articleId;
-   if(articleId){const {error}=await supabase.from("articles").update(payload).eq("id",articleId); if(error)throw error;} else {const {data,error}=await supabase.from("articles").insert(payload).select("id").single(); if(error)throw error; articleId=data.id;}
-   const heroUrl=await uploadHero(articleId!); if(heroUrl){const {error}=await supabase.from("articles").update({hero_image_url:heroUrl}).eq("id",articleId); if(error)throw error;}
-   const {error:delErr}=await supabase.from("article_sections").delete().eq("article_id",articleId); if(delErr)throw delErr; const rows=draft.sections.map((s,i)=>({article_id:articleId,heading:s.heading,body:s.body,is_premium:s.premium,display_order:i,section_type:"standard"})); if(rows.length){const {error}=await supabase.from("article_sections").insert(rows); if(error)throw error;}
-   const nextUi=nextStatus==="in_review"?"In Review":draft.status; setDraft(d=>({...d,articleId,heroUrl:heroUrl??d.heroUrl,status:nextUi})); setSavedAt("cloud saved"); setMessage(nextStatus==="in_review"?(draft.status==="Changes Requested"?"Revisions resubmitted for editorial review.":"Article submitted for editorial review."):"Article saved to Sports Rewritten cloud storage.");
-  }catch(err){setMessage(err instanceof Error?err.message:"Unable to save article.");} finally{setBusy(false)} }
+   const editingStatus=!isStaff&&draft.status==="Changes Requested"?"changes_requested":(!isStaff?"draft":dbStatus(draft.status));
+   const basePayload={title:draft.title,slug:draft.slug,subtitle:draft.subtitle||null,excerpt:draft.excerpt||null,sport:draft.sport,scenario_type:draft.scenarioType,status:editingStatus,access_level:"premium",estimated_read_time:Math.max(1,Math.ceil(words/225)),seo_title:draft.seoTitle||null,seo_description:draft.seoDescription||null,hero_image_alt:draft.heroAlt||null};
+   let articleId=draft.articleId;
+   if(articleId){
+    const {error}=await supabase.from("articles").update(basePayload).eq("id",articleId); if(error)throw error;
+   } else {
+    const {data,error}=await supabase.from("articles").insert({...basePayload,author_id:userId,author_name:profile.display_name,status:"draft"}).select("id").single(); if(error)throw error; articleId=data.id;
+    window.history.replaceState(null,"",`/studio?article=${articleId}`);
+   }
+   const heroUrl=await uploadHero(articleId!);
+   if(heroUrl){const {error}=await supabase.from("articles").update({hero_image_url:heroUrl}).eq("id",articleId); if(error)throw error;}
+   const {error:delErr}=await supabase.from("article_sections").delete().eq("article_id",articleId); if(delErr)throw delErr;
+   const rows=draft.sections.map((s,i)=>({article_id:articleId,heading:s.heading,body:s.body,is_premium:s.premium,display_order:i,section_type:"standard"}));
+   if(rows.length){const {error}=await supabase.from("article_sections").insert(rows); if(error)throw error;}
+   if(nextStatus==="in_review"){
+    const {error}=await supabase.from("articles").update({status:"in_review",submitted_at:new Date().toISOString()}).eq("id",articleId); if(error)throw error;
+   }
+   const nextUi=nextStatus==="in_review"?"In Review":draft.status;
+   setDraft(d=>({...d,articleId,heroUrl:heroUrl??d.heroUrl,status:nextUi}));
+   setSavedAt("cloud saved");
+   setMessage(nextStatus==="in_review"?(draft.status==="Changes Requested"?"Revisions resubmitted for editorial review.":"Article submitted for editorial review."):"Article saved to Sports Rewritten cloud storage.");
+  }catch(err){setMessage(err instanceof Error?err.message:"Unable to save article.");} finally{setBusy(false)}
+ }
  async function submit(){if(!draft.title.trim()||!draft.excerpt.trim()||draft.sections.some(s=>!s.body.trim())){setMessage("Add a headline, excerpt, and content to every section before submitting for review.");return} await saveCloud("in_review")}
 
  if(!userId)return <section className={`shell ${styles.studioShell}`}><div className={styles.authCard}><p className="goldKicker">CONTRIBUTOR ACCESS</p><h2>{authMode==="signin"?"Sign in to Contributor Studio":"Request contributor access"}</h2><p>Approved contributors can save cloud drafts, upload hero images, preview stories, and submit work for editorial review.</p><form onSubmit={handleAuth}>{authMode==="signup"&&<label>Display name<input value={displayName} onChange={e=>setDisplayName(e.target.value)} required/></label>}<label>Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required/></label><label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} minLength={8} required/></label><button className="redButton" disabled={busy}>{busy?"Working…":authMode==="signin"?"Sign In":"Create Account"}</button></form><button className={styles.textButton} type="button" onClick={()=>setAuthMode(authMode==="signin"?"signup":"signin")}>{authMode==="signin"?"Need contributor access? Create an account":"Already have an account? Sign in"}</button>{message&&<p className={styles.message}>{message}</p>}</div></section>;
