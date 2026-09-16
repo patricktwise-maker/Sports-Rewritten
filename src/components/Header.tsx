@@ -13,6 +13,7 @@ export function Header() {
         <div className="headerActions">
           <button className="searchButton" type="button" aria-label="Search">⌕ <span>Search</span></button>
           <Link href="/studio" className="signIn">Contributor Studio</Link>
+          <Link href="/admin" className="signIn">Editorial Dashboard</Link>
           <Link href="#membership" className="goldButton">Subscribe</Link>
         </div>
       </div>
