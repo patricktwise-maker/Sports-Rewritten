@@ -8,3 +8,24 @@ export const articles = [
 ];
 
 export const sports = ["NFL", "NBA", "College Football", "College Basketball", "MLB", "Boxing", "Other Sports"];
+
+export const scenarioTypes = [
+  "Born in Another Era",
+  "Draft What If",
+  "Trade What If",
+  "Free Agency What If",
+  "Injury What If",
+  "Recruiting What If",
+  "Coaching What If",
+  "Life & Career Decisions",
+  "Retirement What If",
+  "Contract & Holdout What If",
+  "Position / Role Change",
+  "Expansion & Relocation",
+  "Rule Change What If",
+  "Front Office / Ownership",
+  "League Structure What If",
+  "Game Rewritten",
+  "Dynasty Rewritten",
+  "Careers Rewritten",
+] as const;
