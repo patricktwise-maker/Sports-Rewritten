@@ -16,10 +16,16 @@ Version 1 foundation for the Sports Rewritten subscription sports publication.
 - Vault and founding membership sections
 - Full prototype article route
 - Metadata foundation for later SEO/Discover work
+- Contributor Studio with Supabase authentication
+- Cloud article drafts and section storage
+- Contributor approval workflow
+- Hero-image storage
+- Editorial review status flow
 
 ## Routes
 
 - `/`
+- `/studio`
 - `/college-football/what-if-joe-hamilton-was-born-20-years-later`
 
 ## Local development
@@ -31,6 +37,10 @@ npm run dev
 
 Open http://localhost:3000.
 
-## Not yet connected
+## Backend
 
-Supabase, Stripe, authentication, search, analytics, publishing admin, and live voting belong to later milestones.
+Sports Rewritten uses a dedicated Supabase project for authentication, contributor profiles, article drafts, article sections, editorial workflow, and article media storage. Vercel environment variables provide the public Supabase project URL and publishable key to the deployed Next.js application.
+
+## Still to come
+
+Stripe subscriptions, reader search, analytics, publishing administration, live voting, and additional editorial tools belong to later milestones.
