@@ -3,297 +3,72 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase-browser";
+import { articleHref } from "@/lib/supabase-public";
 import styles from "./admin.module.css";
 
 type ApplicationStatus = "pending" | "approved" | "declined";
+type Profile = { id:string; display_name:string; role:"admin"|"editor"|"contributor"; is_active:boolean; application_status:ApplicationStatus; created_at:string };
+type ArticleStatus = "draft"|"in_review"|"changes_requested"|"approved"|"scheduled"|"published"|"archived";
+type Article = { id:string; author_id:string; title:string; slug:string; sport:string; scenario_type:string; status:ArticleStatus; submitted_at:string|null; scheduled_for:string|null; published_at:string|null; featured:boolean; updated_at:string };
+type CommentStatus = "pending"|"approved"|"declined";
+type Comment = { id:string; article_id:string; author_name:string; body:string; status:CommentStatus; created_at:string; moderated_at:string|null };
+type ReviewNote = Record<string,string>;
 
-type Profile = {
-  id: string;
-  display_name: string;
-  role: "admin" | "editor" | "contributor";
-  is_active: boolean;
-  application_status: ApplicationStatus;
-  created_at: string;
-};
+const labels:Record<ArticleStatus,string>={draft:"Draft",in_review:"In Review",changes_requested:"Changes Requested",approved:"Approved",scheduled:"Scheduled",published:"Published",archived:"Archived"};
 
-type Article = {
-  id: string;
-  author_id: string;
-  title: string;
-  slug: string;
-  sport: string;
-  scenario_type: string;
-  status: "draft" | "in_review" | "changes_requested" | "approved" | "scheduled" | "published" | "archived";
-  submitted_at: string | null;
-  scheduled_for: string | null;
-  published_at: string | null;
-  featured: boolean;
-  updated_at: string;
-};
+export function AdminDashboard(){
+ const [me,setMe]=useState<Profile|null>(null); const [profiles,setProfiles]=useState<Profile[]>([]); const [articles,setArticles]=useState<Article[]>([]); const [comments,setComments]=useState<Comment[]>([]);
+ const [notes,setNotes]=useState<ReviewNote>({}); const [schedule,setSchedule]=useState<Record<string,string>>({}); const [message,setMessage]=useState(""); const [loading,setLoading]=useState(true); const [busyId,setBusyId]=useState<string|null>(null);
+ const [email,setEmail]=useState(""); const [password,setPassword]=useState(""); const [authBusy,setAuthBusy]=useState(false);
+ useEffect(()=>{void load(); const {data}=supabase.auth.onAuthStateChange(()=>{void load()}); return()=>data.subscription.unsubscribe()},[]);
 
-type ReviewNote = Record<string, string>;
+ async function load(){
+  setLoading(true); setMessage("");
+  const {data:sessionData}=await supabase.auth.getSession(); const user=sessionData.session?.user??null;
+  if(!user){setMe(null);setProfiles([]);setArticles([]);setComments([]);setLoading(false);return}
+  const {data:mine,error:profileError}=await supabase.from("profiles").select("id,display_name,role,is_active,application_status,created_at").eq("id",user.id).maybeSingle();
+  if(profileError){setMessage(profileError.message);setMe(null);setLoading(false);return}
+  const mineProfile=mine as Profile|null; setMe(mineProfile);
+  if(!mineProfile||!mineProfile.is_active||!["admin","editor"].includes(mineProfile.role)){setLoading(false);return}
+  const [pRes,aRes,cRes]=await Promise.all([
+   supabase.from("profiles").select("id,display_name,role,is_active,application_status,created_at").order("created_at",{ascending:false}),
+   supabase.from("articles").select("id,author_id,title,slug,sport,scenario_type,status,submitted_at,scheduled_for,published_at,featured,updated_at").order("updated_at",{ascending:false}),
+   supabase.from("comments").select("id,article_id,author_name,body,status,created_at,moderated_at").order("created_at",{ascending:false})
+  ]);
+  const err=pRes.error||aRes.error||cRes.error; if(err)setMessage(err.message);
+  setProfiles((pRes.data??[]) as Profile[]); setArticles((aRes.data??[]) as Article[]); setComments((cRes.data??[]) as Comment[]); setLoading(false);
+ }
+ async function signIn(e:FormEvent){e.preventDefault();setAuthBusy(true);setMessage("");const {error}=await supabase.auth.signInWithPassword({email,password});setAuthBusy(false);if(error){setMessage(error.message);return}setPassword("");await load()}
 
-const labels: Record<Article["status"], string> = {
-  draft: "Draft",
-  in_review: "In Review",
-  changes_requested: "Changes Requested",
-  approved: "Approved",
-  scheduled: "Scheduled",
-  published: "Published",
-  archived: "Archived",
-};
+ const stats=useMemo(()=>({pending:profiles.filter(p=>p.application_status==="pending").length,review:articles.filter(a=>a.status==="in_review").length,comments:comments.filter(c=>c.status==="pending").length,scheduled:articles.filter(a=>a.status==="scheduled").length,published:articles.filter(a=>a.status==="published").length}),[profiles,articles,comments]);
 
-export function AdminDashboard() {
-  const [me, setMe] = useState<Profile | null>(null);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [articles, setArticles] = useState<Article[]>([]);
-  const [notes, setNotes] = useState<ReviewNote>({});
-  const [schedule, setSchedule] = useState<Record<string, string>>({});
-  const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [authBusy, setAuthBusy] = useState(false);
+ async function manageProfile(profile:Profile,patch:Partial<Pick<Profile,"role"|"is_active"|"application_status">>,successMessage="Contributor access updated."){if(me?.role!=="admin")return;setBusyId(profile.id);setMessage("");const {error}=await supabase.from("profiles").update(patch).eq("id",profile.id);setBusyId(null);if(error)setMessage(error.message);else{setMessage(successMessage);await load()}}
+ async function deleteProfile(profile:Profile){if(me?.role!=="admin"||profile.id===me.id)return;if(!window.confirm(`Delete ${profile.display_name}'s Sports Rewritten profile? This cannot be undone.`))return;setBusyId(profile.id);setMessage("");const {error}=await supabase.from("profiles").delete().eq("id",profile.id);setBusyId(null);if(error){setMessage(error.code==="23503"?"This profile is attached to newsroom content. Deactivate it instead so the editorial record remains intact.":error.message);return}setMessage("Profile deleted from the Sports Rewritten newsroom.");await load()}
+ async function logEvent(articleId:string,eventType:string,details:Record<string,unknown>={}){if(!me)return;await supabase.from("editorial_events").insert({article_id:articleId,actor_id:me.id,event_type:eventType,details})}
+ async function reviewArticle(article:Article,decision:"changes_requested"|"approved"){if(!me)return;setBusyId(article.id);setMessage("");const note=notes[article.id]?.trim()||null;const now=new Date().toISOString();const {error}=await supabase.from("articles").update({status:decision,reviewed_at:now,reviewed_by:me.id,editor_notes:note}).eq("id",article.id);if(!error){await supabase.from("article_reviews").insert({article_id:article.id,reviewer_id:me.id,decision,note});await logEvent(article.id,decision,{note})}setBusyId(null);if(error)setMessage(error.message);else{setMessage(decision==="approved"?"Article approved.":"Revision request sent to contributor.");await load()}}
+ async function publishNow(article:Article){if(!me)return;setBusyId(article.id);const now=new Date().toISOString();const {error}=await supabase.from("articles").update({status:"published",published_at:now,scheduled_for:null,reviewed_by:me.id}).eq("id",article.id);if(!error)await logEvent(article.id,"published",{published_at:now});setBusyId(null);if(error)setMessage(error.message);else{setMessage("Article published.");await load()}}
+ async function scheduleArticle(article:Article){if(!me)return;const value=schedule[article.id];if(!value){setMessage("Choose a publication date and time first.");return}setBusyId(article.id);const iso=new Date(value).toISOString();const {error}=await supabase.from("articles").update({status:"scheduled",scheduled_for:iso,reviewed_by:me.id,reviewed_at:new Date().toISOString()}).eq("id",article.id);if(!error)await logEvent(article.id,"scheduled",{scheduled_for:iso});setBusyId(null);if(error)setMessage(error.message);else{setMessage("Article scheduled.");await load()}}
+ async function setFeatured(article:Article,value:boolean){setBusyId(article.id);const {error}=await supabase.from("articles").update({featured:value}).eq("id",article.id);setBusyId(null);if(error)setMessage(error.message);else{setMessage(value?"Article marked featured.":"Article removed from featured placement.");await load()}}
+ async function moderateComment(comment:Comment,status:"approved"|"declined"){if(!me)return;setBusyId(comment.id);setMessage("");const {error}=await supabase.from("comments").update({status,moderated_by:me.id,moderated_at:new Date().toISOString()}).eq("id",comment.id);setBusyId(null);if(error)setMessage(error.message);else{setMessage(status==="approved"?"Comment approved and now visible publicly.":"Comment declined.");await load()}}
+ async function deleteComment(comment:Comment){if(!window.confirm("Delete this comment permanently?"))return;setBusyId(comment.id);const {error}=await supabase.from("comments").delete().eq("id",comment.id);setBusyId(null);if(error)setMessage(error.message);else{setMessage("Comment deleted.");await load()}}
+ function profileLabel(profile:Profile){if(profile.application_status==="pending")return"Pending";if(profile.application_status==="declined")return"Declined";return profile.is_active?"Active":"Inactive"}
 
-  useEffect(() => {
-    void load();
-    const { data } = supabase.auth.onAuthStateChange(() => { void load(); });
-    return () => data.subscription.unsubscribe();
-  }, []);
+ if(loading)return <section className={`shell ${styles.shell}`}><div className={styles.accessCard}>Loading newsroom…</div></section>;
+ if(!me)return <section className={`shell ${styles.shell}`}><div className={styles.accessCard}><p className="goldKicker">EDITORIAL ACCESS</p><h2>Sign in to the newsroom</h2><p>Use your Sports Rewritten account. Administrator and editor accounts can enter the Editorial Dashboard directly.</p><form onSubmit={signIn} style={{display:"grid",gap:12,marginTop:20}}><label>Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required/></label><label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} required/></label><button className="redButton" disabled={authBusy}>{authBusy?"Signing in…":"Sign In to Editorial Dashboard"}</button></form>{message&&<p className={styles.message}>{message}</p>}<p style={{marginTop:18}}><Link href="/studio">Contributor Studio</Link></p></div></section>;
+ if(!me.is_active||!["admin","editor"].includes(me.role))return <section className={`shell ${styles.shell}`}><div className={styles.accessCard}><h2>Editorial access required</h2><p>This account is signed in, but Editorial Dashboard access is limited to Sports Rewritten editors and administrators.</p><p>Current role: <strong>{me.role}</strong></p><button className="outlineButton" onClick={()=>supabase.auth.signOut()}>Sign Out</button></div></section>;
 
-  async function load() {
-    setLoading(true);
-    setMessage("");
+ return <section className={`shell ${styles.shell}`}>
+  <div className={styles.topline}><div><strong>{me.display_name}</strong><span>{me.role}</span></div><div className={styles.quickLinks}><Link href="/studio">Write Article</Link><button type="button" onClick={()=>supabase.auth.signOut().then(()=>location.href="/admin")}>Sign Out</button></div></div>
+  {message&&<div className={styles.message}>{message}</div>}
+  <div className={styles.stats}><div><span>{stats.pending}</span><small>Pending Contributors</small></div><div><span>{stats.review}</span><small>Articles In Review</small></div><div><span>{stats.comments}</span><small>Comments Pending</small></div><div><span>{stats.scheduled}</span><small>Scheduled</small></div><div><span>{stats.published}</span><small>Published</small></div></div>
 
-    const { data: sessionData } = await supabase.auth.getSession();
-    const user = sessionData.session?.user ?? null;
-    if (!user) {
-      setLoading(false);
-      setMe(null);
-      setProfiles([]);
-      setArticles([]);
-      return;
-    }
+  <div className={styles.sectionHeading}><div><p className="goldKicker">PEOPLE</p><h2>Contributor Management</h2></div><p>{me.role==="admin"?"Approve or decline applications, change roles, deactivate access, or delete eligible profiles.":"Editors can view contributor status. Only administrators can change access."}</p></div>
+  <div className={styles.peopleGrid}>{profiles.map(profile=>{const label=profileLabel(profile);return <article className={styles.personCard} key={profile.id}><div><h3>{profile.display_name}</h3><p>{profile.role}</p></div><span className={label==="Active"?styles.active:styles.pending}>{label}</span>{me.role==="admin"&&profile.id!==me.id&&<div className={styles.personActions}>{profile.application_status==="pending"&&<><button disabled={busyId===profile.id} onClick={()=>void manageProfile(profile,{is_active:true,application_status:"approved"},"Contributor approved.")}>Approve</button><button disabled={busyId===profile.id} onClick={()=>void manageProfile(profile,{is_active:false,application_status:"declined"},"Contributor application declined.")}>Decline</button></>}{profile.application_status==="declined"&&<button disabled={busyId===profile.id} onClick={()=>void manageProfile(profile,{is_active:true,application_status:"approved"},"Contributor approved.")}>Approve Instead</button>}{profile.application_status==="approved"&&profile.is_active&&<button disabled={busyId===profile.id} onClick={()=>void manageProfile(profile,{is_active:false},"Contributor deactivated.")}>Deactivate</button>}{profile.application_status==="approved"&&!profile.is_active&&<button disabled={busyId===profile.id} onClick={()=>void manageProfile(profile,{is_active:true},"Contributor reactivated.")}>Reactivate</button>}<select value={profile.role} disabled={busyId===profile.id} onChange={e=>void manageProfile(profile,{role:e.target.value as Profile["role"]},"Contributor role updated.")}><option value="contributor">Contributor</option><option value="editor">Editor</option><option value="admin">Admin</option></select><button disabled={busyId===profile.id} onClick={()=>void deleteProfile(profile)}>Delete Profile</button></div>}</article>})}</div>
 
-    const { data: mine, error: profileError } = await supabase
-      .from("profiles")
-      .select("id,display_name,role,is_active,application_status,created_at")
-      .eq("id", user.id)
-      .maybeSingle();
+  <div className={styles.sectionHeading}><div><p className="goldKicker">PIPELINE</p><h2>Editorial Queue</h2></div><p>Review submitted stories and move approved work toward publication.</p></div>
+  <div className={styles.articleList}>{articles.length===0&&<div className={styles.empty}>No articles have entered the editorial system yet.</div>}{articles.map(article=>{const author=profiles.find(p=>p.id===article.author_id);return <article className={styles.articleCard} key={article.id}><div className={styles.articleTop}><div><p>{article.sport} · {article.scenario_type}</p><h3>{article.title}</h3><small>By {author?.display_name??"Unknown contributor"} · Updated {new Date(article.updated_at).toLocaleDateString()}</small></div><span className={styles.status}>{labels[article.status]}</span></div><div className={styles.pipelineActions}>{article.status==="in_review"&&<><textarea placeholder="Editorial note or revision request…" value={notes[article.id]??""} onChange={e=>setNotes(n=>({...n,[article.id]:e.target.value}))}/><button disabled={busyId===article.id} onClick={()=>void reviewArticle(article,"changes_requested")}>Request Changes</button><button className={styles.primary} disabled={busyId===article.id} onClick={()=>void reviewArticle(article,"approved")}>Approve</button></>}{["approved","scheduled"].includes(article.status)&&<><input type="datetime-local" value={schedule[article.id]??""} onChange={e=>setSchedule(s=>({...s,[article.id]:e.target.value}))}/><button disabled={busyId===article.id} onClick={()=>void scheduleArticle(article)}>Schedule</button><button className={styles.primary} disabled={busyId===article.id} onClick={()=>void publishNow(article)}>Publish Now</button></>}{article.status==="published"&&<><button disabled={busyId===article.id} onClick={()=>void setFeatured(article,!article.featured)}>{article.featured?"Remove Featured":"Make Featured"}</button><Link className={styles.viewLink} href={articleHref(article.sport,article.slug)}>View Live Article</Link></>}<Link className={styles.viewLink} href={`/studio?article=${article.id}`}>Open in Studio</Link></div>{article.scheduled_for&&<p className={styles.scheduleLine}>Scheduled: {new Date(article.scheduled_for).toLocaleString()}</p>}</article>})}</div>
 
-    if (profileError) {
-      setMessage(profileError.message);
-      setLoading(false);
-      setMe(null);
-      return;
-    }
-
-    const mineProfile = mine as Profile | null;
-    setMe(mineProfile);
-    if (!mineProfile || !mineProfile.is_active || !["admin", "editor"].includes(mineProfile.role)) {
-      setLoading(false);
-      return;
-    }
-
-    const [{ data: p, error: peopleError }, { data: a, error: articlesError }] = await Promise.all([
-      supabase.from("profiles").select("id,display_name,role,is_active,application_status,created_at").order("created_at", { ascending: false }),
-      supabase.from("articles").select("id,author_id,title,slug,sport,scenario_type,status,submitted_at,scheduled_for,published_at,featured,updated_at").order("updated_at", { ascending: false }),
-    ]);
-
-    if (peopleError || articlesError) setMessage(peopleError?.message ?? articlesError?.message ?? "Unable to load newsroom data.");
-    setProfiles((p ?? []) as Profile[]);
-    setArticles((a ?? []) as Article[]);
-    setLoading(false);
-  }
-
-  async function signIn(e: FormEvent) {
-    e.preventDefault();
-    setAuthBusy(true);
-    setMessage("");
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setAuthBusy(false);
-    if (error) {
-      setMessage(error.message);
-      return;
-    }
-    setPassword("");
-    await load();
-  }
-
-  const stats = useMemo(() => ({
-    pending: profiles.filter((p) => p.application_status === "pending").length,
-    review: articles.filter((a) => a.status === "in_review").length,
-    scheduled: articles.filter((a) => a.status === "scheduled").length,
-    published: articles.filter((a) => a.status === "published").length,
-  }), [profiles, articles]);
-
-  async function manageProfile(
-    profile: Profile,
-    patch: Partial<Pick<Profile, "role" | "is_active" | "application_status">>,
-    successMessage = "Contributor access updated."
-  ) {
-    if (me?.role !== "admin") return;
-    setBusyId(profile.id);
-    setMessage("");
-    const { error } = await supabase.from("profiles").update(patch).eq("id", profile.id);
-    setBusyId(null);
-    if (error) setMessage(error.message);
-    else { setMessage(successMessage); await load(); }
-  }
-
-  async function deleteProfile(profile: Profile) {
-    if (me?.role !== "admin" || profile.id === me.id) return;
-    const confirmed = window.confirm(`Delete ${profile.display_name}'s Sports Rewritten profile? This cannot be undone.`);
-    if (!confirmed) return;
-
-    setBusyId(profile.id);
-    setMessage("");
-    const { error } = await supabase.from("profiles").delete().eq("id", profile.id);
-    setBusyId(null);
-
-    if (error) {
-      if (error.code === "23503") {
-        setMessage("This profile cannot be deleted because it is attached to articles, reviews, media, or editorial history. Deactivate it instead so the newsroom record remains intact.");
-      } else {
-        setMessage(error.message);
-      }
-      return;
-    }
-
-    setMessage("Profile deleted from the Sports Rewritten newsroom.");
-    await load();
-  }
-
-  async function logEvent(articleId: string, eventType: string, details: Record<string, unknown> = {}) {
-    if (!me) return;
-    await supabase.from("editorial_events").insert({ article_id: articleId, actor_id: me.id, event_type: eventType, details });
-  }
-
-  async function reviewArticle(article: Article, decision: "changes_requested" | "approved") {
-    if (!me) return;
-    setBusyId(article.id);
-    setMessage("");
-    const note = notes[article.id]?.trim() || null;
-    const now = new Date().toISOString();
-    const { error } = await supabase.from("articles").update({ status: decision, reviewed_at: now, reviewed_by: me.id, editor_notes: note }).eq("id", article.id);
-    if (!error) {
-      await supabase.from("article_reviews").insert({ article_id: article.id, reviewer_id: me.id, decision, note });
-      await logEvent(article.id, decision, { note });
-    }
-    setBusyId(null);
-    if (error) setMessage(error.message);
-    else { setMessage(decision === "approved" ? "Article approved." : "Revision request sent to contributor."); await load(); }
-  }
-
-  async function publishNow(article: Article) {
-    if (!me) return;
-    setBusyId(article.id);
-    const now = new Date().toISOString();
-    const { error } = await supabase.from("articles").update({ status: "published", published_at: now, scheduled_for: null, reviewed_at: article.status === "in_review" ? now : undefined, reviewed_by: me.id }).eq("id", article.id);
-    if (!error) await logEvent(article.id, "published", { published_at: now });
-    setBusyId(null);
-    if (error) setMessage(error.message); else { setMessage("Article published."); await load(); }
-  }
-
-  async function scheduleArticle(article: Article) {
-    if (!me) return;
-    const value = schedule[article.id];
-    if (!value) { setMessage("Choose a publication date and time first."); return; }
-    setBusyId(article.id);
-    const iso = new Date(value).toISOString();
-    const { error } = await supabase.from("articles").update({ status: "scheduled", scheduled_for: iso, reviewed_by: me.id, reviewed_at: new Date().toISOString() }).eq("id", article.id);
-    if (!error) await logEvent(article.id, "scheduled", { scheduled_for: iso });
-    setBusyId(null);
-    if (error) setMessage(error.message); else { setMessage("Article scheduled."); await load(); }
-  }
-
-  async function setFeatured(article: Article, value: boolean) {
-    setBusyId(article.id);
-    const { error } = await supabase.from("articles").update({ featured: value }).eq("id", article.id);
-    setBusyId(null);
-    if (error) setMessage(error.message); else { setMessage(value ? "Article marked featured." : "Article removed from featured placement."); await load(); }
-  }
-
-  function profileLabel(profile: Profile) {
-    if (profile.application_status === "pending") return "Pending";
-    if (profile.application_status === "declined") return "Declined";
-    return profile.is_active ? "Active" : "Inactive";
-  }
-
-  if (loading) return <section className={`shell ${styles.shell}`}><div className={styles.accessCard}>Loading newsroom…</div></section>;
-
-  if (!me) return <section className={`shell ${styles.shell}`}><div className={styles.accessCard}><p className="goldKicker">EDITORIAL ACCESS</p><h2>Sign in to the newsroom</h2><p>Use your Sports Rewritten account. Administrator and editor accounts can enter the Editorial Dashboard directly.</p><form onSubmit={signIn} style={{ display: "grid", gap: 12, marginTop: 20 }}><label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label><label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label><button className="redButton" disabled={authBusy}>{authBusy ? "Signing in…" : "Sign In to Editorial Dashboard"}</button></form>{message && <p className={styles.message}>{message}</p>}<p style={{ marginTop: 18 }}><Link href="/studio">Contributor Studio</Link></p></div></section>;
-
-  if (!me.is_active || !["admin", "editor"].includes(me.role)) return <section className={`shell ${styles.shell}`}><div className={styles.accessCard}><h2>Editorial access required</h2><p>This account is signed in, but Editorial Dashboard access is limited to Sports Rewritten editors and administrators.</p><p>Current role: <strong>{me.role}</strong></p><button className="outlineButton" onClick={() => supabase.auth.signOut()}>Sign Out</button></div></section>;
-
-  return (
-    <section className={`shell ${styles.shell}`}>
-      <div className={styles.topline}>
-        <div><strong>{me.display_name}</strong><span>{me.role}</span></div>
-        <div className={styles.quickLinks}><Link href="/studio">Write Article</Link><button type="button" onClick={() => supabase.auth.signOut().then(() => location.href = "/admin")}>Sign Out</button></div>
-      </div>
-      {message && <div className={styles.message}>{message}</div>}
-
-      <div className={styles.stats}>
-        <div><span>{stats.pending}</span><small>Pending Contributors</small></div>
-        <div><span>{stats.review}</span><small>Articles In Review</small></div>
-        <div><span>{stats.scheduled}</span><small>Scheduled</small></div>
-        <div><span>{stats.published}</span><small>Published</small></div>
-      </div>
-
-      <div className={styles.sectionHeading}><div><p className="goldKicker">PEOPLE</p><h2>Contributor Management</h2></div><p>{me.role === "admin" ? "Approve or decline applications, change roles, deactivate access, or delete eligible profiles." : "Editors can view contributor status. Only administrators can change access."}</p></div>
-      <div className={styles.peopleGrid}>
-        {profiles.map((profile) => {
-          const label = profileLabel(profile);
-          const statusClass = label === "Active" ? styles.active : styles.pending;
-          return (
-            <article className={styles.personCard} key={profile.id}>
-              <div><h3>{profile.display_name}</h3><p>{profile.role}</p></div>
-              <span className={statusClass}>{label}</span>
-              {me.role === "admin" && profile.id !== me.id && <div className={styles.personActions}>
-                {profile.application_status === "pending" && <>
-                  <button disabled={busyId === profile.id} onClick={() => void manageProfile(profile, { is_active: true, application_status: "approved" }, "Contributor approved.")}>Approve</button>
-                  <button disabled={busyId === profile.id} onClick={() => void manageProfile(profile, { is_active: false, application_status: "declined" }, "Contributor application declined.")}>Decline</button>
-                </>}
-                {profile.application_status === "declined" && <button disabled={busyId === profile.id} onClick={() => void manageProfile(profile, { is_active: true, application_status: "approved" }, "Contributor approved.")}>Approve Instead</button>}
-                {profile.application_status === "approved" && profile.is_active && <button disabled={busyId === profile.id} onClick={() => void manageProfile(profile, { is_active: false }, "Contributor deactivated.")}>Deactivate</button>}
-                {profile.application_status === "approved" && !profile.is_active && <button disabled={busyId === profile.id} onClick={() => void manageProfile(profile, { is_active: true }, "Contributor reactivated.")}>Reactivate</button>}
-                <select value={profile.role} disabled={busyId === profile.id} onChange={(e) => void manageProfile(profile, { role: e.target.value as Profile["role"] }, "Contributor role updated.")}>
-                  <option value="contributor">Contributor</option><option value="editor">Editor</option><option value="admin">Admin</option>
-                </select>
-                <button disabled={busyId === profile.id} onClick={() => void deleteProfile(profile)}>Delete Profile</button>
-              </div>}
-            </article>
-          );
-        })}
-      </div>
-
-      <div className={styles.sectionHeading}><div><p className="goldKicker">PIPELINE</p><h2>Editorial Queue</h2></div><p>Review submitted stories and move approved work toward publication.</p></div>
-      <div className={styles.articleList}>
-        {articles.length === 0 && <div className={styles.empty}>No articles have entered the editorial system yet.</div>}
-        {articles.map((article) => {
-          const author = profiles.find((p) => p.id === article.author_id);
-          return <article className={styles.articleCard} key={article.id}>
-            <div className={styles.articleTop}><div><p>{article.sport} · {article.scenario_type}</p><h3>{article.title}</h3><small>By {author?.display_name ?? "Unknown contributor"} · Updated {new Date(article.updated_at).toLocaleDateString()}</small></div><span className={styles.status}>{labels[article.status]}</span></div>
-            <div className={styles.pipelineActions}>
-              {article.status === "in_review" && <>
-                <textarea placeholder="Editorial note or revision request…" value={notes[article.id] ?? ""} onChange={(e) => setNotes((n) => ({ ...n, [article.id]: e.target.value }))} />
-                <button disabled={busyId === article.id} onClick={() => void reviewArticle(article, "changes_requested")}>Request Changes</button>
-                <button className={styles.primary} disabled={busyId === article.id} onClick={() => void reviewArticle(article, "approved")}>Approve</button>
-              </>}
-              {["approved", "scheduled"].includes(article.status) && <>
-                <input type="datetime-local" value={schedule[article.id] ?? ""} onChange={(e) => setSchedule((s) => ({ ...s, [article.id]: e.target.value }))} />
-                <button disabled={busyId === article.id} onClick={() => void scheduleArticle(article)}>Schedule</button>
-                <button className={styles.primary} disabled={busyId === article.id} onClick={() => void publishNow(article)}>Publish Now</button>
-              </>}
-              {article.status === "published" && <button disabled={busyId === article.id} onClick={() => void setFeatured(article, !article.featured)}>{article.featured ? "Remove Featured" : "Make Featured"}</button>}
-              <Link className={styles.viewLink} href={`/studio?article=${article.id}`}>Open in Studio</Link>
-            </div>
-            {article.scheduled_for && <p className={styles.scheduleLine}>Scheduled: {new Date(article.scheduled_for).toLocaleString()}</p>}
-          </article>;
-        })}
-      </div>
-    </section>
-  );
+  <div className={styles.sectionHeading}><div><p className="goldKicker">DISCUSSION</p><h2>Comment Moderation</h2></div><p>New reader comments remain hidden until an editor approves them.</p></div>
+  <div className={styles.articleList}>{comments.length===0&&<div className={styles.empty}>No reader comments yet.</div>}{comments.map(comment=>{const article=articles.find(a=>a.id===comment.article_id);return <article className={styles.articleCard} key={comment.id}><div className={styles.articleTop}><div><p>{article?.title??"Article"}</p><h3>{comment.author_name}</h3><small>{new Date(comment.created_at).toLocaleString()}</small></div><span className={styles.status}>{comment.status}</span></div><p style={{whiteSpace:"pre-wrap",lineHeight:1.6}}>{comment.body}</p><div className={styles.pipelineActions}>{comment.status==="pending"&&<><button className={styles.primary} disabled={busyId===comment.id} onClick={()=>void moderateComment(comment,"approved")}>Approve Comment</button><button disabled={busyId===comment.id} onClick={()=>void moderateComment(comment,"declined")}>Decline Comment</button></>} {comment.status==="declined"&&<button disabled={busyId===comment.id} onClick={()=>void moderateComment(comment,"approved")}>Approve Instead</button>}<button disabled={busyId===comment.id} onClick={()=>void deleteComment(comment)}>Delete Comment</button>{article?.status==="published"&&<Link className={styles.viewLink} href={articleHref(article.sport,article.slug)}>View Article</Link>}</div></article>})}</div>
+ </section>
 }
