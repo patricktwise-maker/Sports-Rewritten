@@ -21,6 +21,7 @@ Version 1 foundation for the Sports Rewritten subscription sports publication.
 - Contributor approval workflow
 - Hero-image storage
 - Editorial review status flow
+- Git-to-Vercel automatic deployment enabled
 
 ## Routes
 
