@@ -12,7 +12,7 @@ export function Header() {
         <p className="tagline">THE HOME OF THE SPORTS MULTIVERSE</p>
         <div className="headerActions">
           <button className="searchButton" type="button" aria-label="Search">⌕ <span>Search</span></button>
-          <Link href="#" className="signIn">Sign In</Link>
+          <Link href="/studio" className="signIn">Contributor Studio</Link>
           <Link href="#membership" className="goldButton">Subscribe</Link>
         </div>
       </div>
