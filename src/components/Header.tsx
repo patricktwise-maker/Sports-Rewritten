@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { sports } from "@/lib/content";
+import { sportSlug } from "@/lib/supabase-public";
 
 export function Header() {
   return (
@@ -11,17 +12,17 @@ export function Header() {
         </Link>
         <p className="tagline">THE HOME OF THE SPORTS MULTIVERSE</p>
         <div className="headerActions">
-          <button className="searchButton" type="button" aria-label="Search">⌕ <span>Search</span></button>
+          <Link className="searchButton" href="/search" aria-label="Search">⌕ <span>Search</span></Link>
           <Link href="/studio" className="signIn">Contributor Studio</Link>
           <Link href="/admin" className="signIn">Editorial Dashboard</Link>
-          <Link href="#membership" className="goldButton">Subscribe</Link>
+          <Link href="/membership" className="goldButton">Subscribe</Link>
         </div>
       </div>
       <nav className="mainNav" aria-label="Primary navigation">
         <div className="shell navScroll">
-          <Link href="/" className="active">Home</Link>
-          {sports.map((sport) => <Link key={sport} href="#categories">{sport}</Link>)}
-          <Link href="#vault">The Vault</Link>
+          <Link href="/">Home</Link>
+          {sports.map((sport) => <Link key={sport} href={`/${sportSlug(sport)}`}>{sport}</Link>)}
+          <Link href="/vault">The Vault</Link>
         </div>
       </nav>
     </header>
