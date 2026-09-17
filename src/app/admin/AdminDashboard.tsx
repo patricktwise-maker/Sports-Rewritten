@@ -42,8 +42,27 @@ export function AdminDashboard(){
 
  const stats=useMemo(()=>({pending:profiles.filter(p=>p.application_status==="pending").length,review:articles.filter(a=>a.status==="in_review").length,comments:comments.filter(c=>c.status==="pending").length,scheduled:articles.filter(a=>a.status==="scheduled").length,published:articles.filter(a=>a.status==="published").length}),[profiles,articles,comments]);
 
- async function manageProfile(profile:Profile,patch:Partial<Pick<Profile,"role"|"is_active"|"application_status">>,successMessage="Contributor access updated."){if(me?.role!=="admin")return;setBusyId(profile.id);setMessage("");const {error}=await supabase.from("profiles").update(patch).eq("id",profile.id);setBusyId(null);if(error)setMessage(error.message);else{setMessage(successMessage);await load()}}
- async function deleteProfile(profile:Profile){if(me?.role!=="admin"||profile.id===me.id)return;if(!window.confirm(`Delete ${profile.display_name}'s Sports Rewritten profile? This cannot be undone.`))return;setBusyId(profile.id);setMessage("");const {error}=await supabase.from("profiles").delete().eq("id",profile.id);setBusyId(null);if(error){setMessage(error.code==="23503"?"This profile is attached to newsroom content. Deactivate it instead so the editorial record remains intact.":error.message);return}setMessage("Profile deleted from the Sports Rewritten newsroom.");await load()}
+ async function manageProfile(profile:Profile,patch:Partial<Pick<Profile,"role"|"is_active"|"application_status">>,successMessage="Contributor access updated."){
+  if(me?.role!=="admin")return;
+  setBusyId(profile.id);setMessage("");
+  const {error}=await supabase.rpc("admin_manage_profile",{
+   target_id:profile.id,
+   new_role:patch.role??null,
+   new_is_active:patch.is_active??null,
+   new_application_status:patch.application_status??null
+  });
+  setBusyId(null);
+  if(error)setMessage(error.message);else{setMessage(successMessage);await load()}
+ }
+ async function deleteProfile(profile:Profile){
+  if(me?.role!=="admin"||profile.id===me.id)return;
+  if(!window.confirm(`Delete ${profile.display_name}'s Sports Rewritten profile? This cannot be undone.`))return;
+  setBusyId(profile.id);setMessage("");
+  const {error}=await supabase.rpc("admin_delete_profile",{target_id:profile.id});
+  setBusyId(null);
+  if(error){setMessage(error.code==="23503"?"This profile is attached to newsroom content. Deactivate it instead so the editorial record remains intact.":error.message);return}
+  setMessage("Profile deleted from the Sports Rewritten newsroom.");await load()
+ }
  async function logEvent(articleId:string,eventType:string,details:Record<string,unknown>={}){if(!me)return;await supabase.from("editorial_events").insert({article_id:articleId,actor_id:me.id,event_type:eventType,details})}
  async function reviewArticle(article:Article,decision:"changes_requested"|"approved"){if(!me)return;setBusyId(article.id);setMessage("");const note=notes[article.id]?.trim()||null;const now=new Date().toISOString();const {error}=await supabase.from("articles").update({status:decision,reviewed_at:now,reviewed_by:me.id,editor_notes:note}).eq("id",article.id);if(!error){await supabase.from("article_reviews").insert({article_id:article.id,reviewer_id:me.id,decision,note});await logEvent(article.id,decision,{note})}setBusyId(null);if(error)setMessage(error.message);else{setMessage(decision==="approved"?"Article approved.":"Revision request sent to contributor.");await load()}}
  async function publishNow(article:Article){if(!me)return;setBusyId(article.id);const now=new Date().toISOString();const {error}=await supabase.from("articles").update({status:"published",published_at:now,scheduled_for:null,reviewed_by:me.id}).eq("id",article.id);if(!error)await logEvent(article.id,"published",{published_at:now});setBusyId(null);if(error)setMessage(error.message);else{setMessage("Article published.");await load()}}
