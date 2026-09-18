@@ -61,7 +61,7 @@ export function ArticleSections({
 
       if (!active) return;
 
-      if (membershipError || !hasMembership) {
+      if (accessError || !hasPremiumAccess) {
         setMembershipState("nonmember");
         setSections(initialFreeSections);
         return;
