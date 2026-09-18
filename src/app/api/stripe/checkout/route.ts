@@ -45,6 +45,41 @@ export async function POST(request: Request) {
     return NextResponse.json({ url: session.url });
   } catch (error) {
     console.error("Stripe checkout error", error);
-    return NextResponse.json({ error: "Unable to start checkout." }, { status: 500 });
+
+    if (error instanceof Error) {
+      if (error.message.includes("Supabase server credentials are not configured")) {
+        return NextResponse.json(
+          { error: "Checkout server configuration is missing the Supabase secret." },
+          { status: 503 }
+        );
+      }
+
+      if (
+        error.message.includes("No such price") ||
+        error.message.includes("similar object exists in test mode") ||
+        error.message.includes("similar object exists in live mode")
+      ) {
+        return NextResponse.json(
+          { error: "Stripe is connected, but the live account does not match the configured membership price." },
+          { status: 503 }
+        );
+      }
+
+      if (
+        error.message.includes("Invalid API Key") ||
+        error.message.includes("api_key") ||
+        error.message.includes("Unauthorized")
+      ) {
+        return NextResponse.json(
+          { error: "Stripe rejected the configured live secret key." },
+          { status: 503 }
+        );
+      }
+    }
+
+    return NextResponse.json(
+      { error: "Unable to start checkout. The server reached an unexpected checkout error." },
+      { status: 500 }
+    );
   }
 }
