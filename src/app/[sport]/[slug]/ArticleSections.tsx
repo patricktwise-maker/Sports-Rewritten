@@ -55,8 +55,8 @@ export function ArticleSections({
         return;
       }
 
-      const { data: hasMembership, error: membershipError } = await supabase.rpc(
-        "has_active_membership"
+      const { data: hasPremiumAccess, error: accessError } = await supabase.rpc(
+        "has_premium_access"
       );
 
       if (!active) return;
