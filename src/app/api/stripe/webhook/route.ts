@@ -12,7 +12,11 @@ async function syncSubscription(subscription: Stripe.Subscription) {
   if (!userId || !planCode) return;
 
   const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
-  const periodEnd = (subscription as any).current_period_end as number | undefined;
+  const legacyPeriodEnd = (subscription as Stripe.Subscription & { current_period_end?: number }).current_period_end;
+  const itemPeriodEnds = subscription.items?.data
+    ?.map((item) => item.current_period_end)
+    .filter((value): value is number => typeof value === "number") ?? [];
+  const periodEnd = legacyPeriodEnd ?? (itemPeriodEnds.length ? Math.max(...itemPeriodEnds) : undefined);
   const supabase = createServerSupabaseClient();
 
   const payload = {
