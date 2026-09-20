@@ -59,23 +59,23 @@ export default async function Home() {
               {['What if the Bulls drafted Melo?','What if Bo Jackson never got hurt?','What if Alabama never hired Saban?','What if Seattle kept Griffey?'].map((x) => <label className="pollOption" key={x}><input type="radio" name="poll"/> <span>{x}</span></label>)}
               <button className="redButton full" type="button">Vote Now</button>
             </div>
-            <div className="panel dynasty"><p className="goldKicker">FROM THE MULTIVERSE</p><h2>DYNASTY<br/>ARCHITECT</h2><p>Read the timeline. Then build your own.</p><a className="goldButton" href="#">Explore the Game</a></div>
+            <div className="panel dynasty"><p className="goldKicker">FROM THE MULTIVERSE</p><h2>DYNASTY<br/>ARCHITECT</h2><p>Read the timeline. Then build your own.</p><span className="goldButton" aria-disabled="true">Game Coming Soon</span></div>
           </aside>
         </section>
 
-        <section className="shell sectionBlock"><div className="sectionHeading"><h2>{hasLiveStories ? "NEW THIS WEEK" : "COMING TO SPORTS REWRITTEN"}</h2><a href="#vault">View the archive →</a></div><div className="storyGrid">
+        <section className="shell sectionBlock"><div className="sectionHeading"><h2>{hasLiveStories ? "NEW THIS WEEK" : "COMING TO SPORTS REWRITTEN"}</h2><Link href="/vault">View the archive →</Link></div><div className="storyGrid">
           {hasLiveStories ? latest.map((article, i) => <article className="storyCard" key={article.id}><div className={`storyArt art${i+1}`}>{article.hero_image_url ? <img src={article.hero_image_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <span>{article.sport.split(' ').map(w=>w[0]).join('').slice(0,3)}</span>}</div><p className="storySport">{article.sport}</p><h3><Link href={articleHref(article.sport, article.slug)}>{article.title}</Link></h3><p className="storyMeta">{article.estimated_read_time || 1} min • {article.scenario_type}</p></article>) :
           prototypeArticles.slice(1).map((article, i) => <article className="storyCard" key={article.title}><div className={`storyArt art${i+1}`}><span>{article.sport.split(' ').map(w=>w[0]).join('').slice(0,3)}</span></div><p className="storySport">{article.sport}</p><h3>{article.title}</h3><p className="storyMeta">{article.read} • Alternate Timeline</p></article>)}
         </div></section>
 
         <section className="splitSection shell">
-          <div id="categories" className="browse panel"><div className="sectionHeading"><h2>BROWSE BY SPORT</h2></div><div className="categoryGrid">{sports.map((sport, i)=><a href="#vault" className="categoryCard" key={sport}><span className={`categoryIcon c${i}`}>{sport.split(' ').map(w=>w[0]).join('').slice(0,3)}</span><strong>{sport}</strong><small>Explore →</small></a>)}</div></div>
+          <div id="categories" className="browse panel"><div className="sectionHeading"><h2>BROWSE BY SPORT</h2></div><div className="categoryGrid">{sports.map((sport, i)=><Link href={`/${sportSlug(sport)}`} className="categoryCard" key={sport}><span className={`categoryIcon c${i}`}>{sport.split(' ').map(w=>w[0]).join('').slice(0,3)}</span><strong>{sport}</strong><small>Explore →</small></Link>)}</div></div>
           <div className="panel mostRead"><p className="goldKicker">{hasLiveStories ? "LATEST TIMELINES" : "MOST READ"}</p>{hasLiveStories ? published.slice(0,5).map((a,i)=><Link href={articleHref(a.sport,a.slug)} className="ranked" key={a.id}><strong>{i+1}</strong><span>{a.title}</span></Link>) : prototypeArticles.slice(0,5).map((a,i)=><a href={a.slug} className="ranked" key={a.title}><strong>{i+1}</strong><span>{a.title}</span></a>)}</div>
         </section>
 
-        <section id="vault" className="vault shell"><div><p className="eyebrow">THE VAULT</p><h2>ONE CHANGE.<br/><span>AN ENTIRE SPORTS WORLD MOVES.</span></h2><p>Every Sports Rewritten feature joins a growing archive of alternate drafts, careers, dynasties, recruiting decisions, injuries, trades, free agency moves, life decisions, and era shifts.</p></div><a className="outlineButton" href="#">Enter the Vault →</a></section>
+        <section id="vault" className="vault shell"><div><p className="eyebrow">THE VAULT</p><h2>ONE CHANGE.<br/><span>AN ENTIRE SPORTS WORLD MOVES.</span></h2><p>Every Sports Rewritten feature joins a growing archive of alternate drafts, careers, dynasties, recruiting decisions, injuries, trades, free agency moves, life decisions, and era shifts.</p></div><Link className="outlineButton" href="/vault">Enter the Vault →</Link></section>
 
-        <section id="membership" className="membership shell"><div><p className="goldKicker">MEMBERSHIP</p><h2>ENTER THE SPORTS MULTIVERSE.</h2><p>Full premium archive, weekly timelines, member voting, and founding-member access.</p></div><div className="priceBox"><span>Founding members</span><strong>$2.99<small>/month</small></strong><a className="goldButton" href="#">Become a Founding Member</a></div></section>
+        <section id="membership" className="membership shell"><div><p className="goldKicker">MEMBERSHIP</p><h2>ENTER THE SPORTS MULTIVERSE.</h2><p>Full premium archive, weekly timelines, member voting, and founding-member access.</p></div><div className="priceBox"><span>Founding members</span><strong>$2.99<small>/month</small></strong><Link className="goldButton" href="/membership">Become a Founding Member</Link></div></section>
       </main>
       <Footer />
     </>
