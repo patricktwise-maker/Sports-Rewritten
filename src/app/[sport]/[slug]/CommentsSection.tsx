@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase-browser";
 import styles from "./article.module.css";
 
@@ -17,8 +18,19 @@ export function CommentsSection({ articleId }: { articleId: string }) {
   const [body, setBody] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
 
-  useEffect(() => { void loadComments(); }, [articleId]);
+  useEffect(() => {
+    void loadComments();
+    void syncAuth();
+    const { data } = supabase.auth.onAuthStateChange(() => void syncAuth());
+    return () => data.subscription.unsubscribe();
+  }, [articleId]);
+
+  async function syncAuth() {
+    const { data: { user } } = await supabase.auth.getUser();
+    setSignedIn(Boolean(user));
+  }
 
   async function loadComments() {
     const { data } = await supabase
@@ -33,6 +45,10 @@ export function CommentsSection({ articleId }: { articleId: string }) {
   async function submitComment(e: FormEvent) {
     e.preventDefault();
     setMessage("");
+    if (!signedIn) {
+      setMessage("Sign in before submitting a comment.");
+      return;
+    }
     if (name.trim().length < 2 || body.trim().length < 2) {
       setMessage("Add your name and a comment before submitting.");
       return;
@@ -40,6 +56,11 @@ export function CommentsSection({ articleId }: { articleId: string }) {
     setBusy(true);
     const { data: sessionData } = await supabase.auth.getSession();
     const userId = sessionData.session?.user.id ?? null;
+    if (!userId) {
+      setBusy(false);
+      setMessage("Sign in before submitting a comment.");
+      return;
+    }
     const { error } = await supabase.from("comments").insert({
       article_id: articleId,
       user_id: userId,
@@ -81,7 +102,8 @@ export function CommentsSection({ articleId }: { articleId: string }) {
 
       <form className={styles.commentForm} onSubmit={submitComment}>
         <h3>Join the discussion</h3>
-        <p>Comments are reviewed before they appear publicly.</p>
+        <p>Comments are reviewed before they appear publicly. You must be signed in to comment.</p>
+        {!signedIn && <p><Link href="/membership">Sign in or create a reader account</Link> to join the discussion.</p>}
         <label>
           Display name
           <input maxLength={80} value={name} onChange={(e) => setName(e.target.value)} required />
@@ -90,7 +112,7 @@ export function CommentsSection({ articleId }: { articleId: string }) {
           Comment
           <textarea maxLength={2000} rows={5} value={body} onChange={(e) => setBody(e.target.value)} required />
         </label>
-        <button className="redButton" type="submit" disabled={busy}>{busy ? "Submitting…" : "Submit Comment"}</button>
+        <button className="redButton" type="submit" disabled={busy || !signedIn}>{busy ? "Submitting…" : "Submit Comment"}</button>
         {message && <p className={styles.commentMessage}>{message}</p>}
       </form>
     </section>
