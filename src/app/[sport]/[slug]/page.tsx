@@ -15,7 +15,7 @@ type Article = {
   seo_description:string|null; author_name:string|null; published_at:string|null; access_level:"free"|"premium";
 };
 type SectionMeta = { id:string; heading:string; is_premium:boolean; display_order:number; section_type:string };
-type SectionBody = SectionMeta & { body:string };
+type SectionBody = SectionMeta & { body:string; image_url:string|null; image_alt:string|null; image_caption:string|null };
 type Related={id:string;title:string;slug:string;sport:string;scenario_type:string;excerpt:string|null;estimated_read_time:number|null};
 
 async function getArticle(slug:string) {
@@ -61,7 +61,7 @@ export default async function PublishedArticlePage({ params }:{ params:Promise<{
 
   const [{ data: freeSectionData },{ data: sectionMetaData },{data:relatedData}] = await Promise.all([
     publicSupabase.from("article_sections")
-      .select("id,heading,body,is_premium,display_order,section_type")
+      .select("id,heading,body,is_premium,display_order,section_type,image_url,image_alt,image_caption")
       .eq("article_id", article.id)
       .eq("is_premium", false)
       .order("display_order", { ascending:true }),
