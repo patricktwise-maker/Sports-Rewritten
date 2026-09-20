@@ -15,6 +15,9 @@ type SectionMeta = {
 
 type SectionBody = SectionMeta & {
   body: string;
+  image_url: string | null;
+  image_alt: string | null;
+  image_caption: string | null;
 };
 
 function sectionAnchor(section: SectionMeta, index: number) {
@@ -70,7 +73,7 @@ export function ArticleSections({
       const { data, error } = await supabase
         .from("article_sections")
         .select(
-          "id,heading,body,is_premium,display_order,section_type"
+          "id,heading,body,is_premium,display_order,section_type,image_url,image_alt,image_caption"
         )
         .eq("article_id", articleId)
         .order("display_order", { ascending: true });
@@ -185,6 +188,12 @@ export function ArticleSections({
                   <span className={styles.premium}>PREMIUM</span>
                 )}
               </h2>
+              {fullSection?.image_url && (
+                <figure className={styles.sectionFigure}>
+                  <img src={fullSection.image_url} alt={fullSection.image_alt || section.heading} />
+                  {fullSection.image_caption && <figcaption>{fullSection.image_caption}</figcaption>}
+                </figure>
+              )}
               <p>{fullSection?.body ?? ""}</p>
             </div>
           </section>
