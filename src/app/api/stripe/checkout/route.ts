@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { getStripe, stripePlans, type StripePlanCode } from "@/lib/stripe-server";
 
-const SITE_URL = "https://sports-rewritten.vercel.app";
+const SITE_URL = "https://sportsrewritten.com";
 
 export async function POST(request: Request) {
   try {
