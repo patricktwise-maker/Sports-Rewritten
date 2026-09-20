@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { articles as prototypeArticles, sports } from "@/lib/content";
-import { articleHref, createPublicSupabaseClient } from "@/lib/supabase-public";
+import { articleHref, createPublicSupabaseClient, sportSlug } from "@/lib/supabase-public";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
