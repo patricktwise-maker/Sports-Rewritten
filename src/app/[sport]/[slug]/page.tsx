@@ -35,7 +35,7 @@ export async function generateMetadata({ params }:{ params:Promise<{sport:string
   const { sport, slug } = await params;
   const article = await getArticle(slug);
   if (!article) return { title:"Article Not Found | Sports Rewritten" };
-  const canonical=`https://sports-rewritten.vercel.app/${sport}/${slug}`;
+  const canonical=`https://sportsrewritten.com/${sport}/${slug}`;
   return {
     title: article.seo_title || `${article.title} | Sports Rewritten`,
     description: article.seo_description || article.excerpt || undefined,
@@ -88,7 +88,7 @@ export default async function PublishedArticlePage({ params }:{ params:Promise<{
     author:{"@type":"Person",name:article.author_name||"Sports Rewritten"},
     datePublished:article.published_at||undefined,
     image:article.hero_image_url||undefined,
-    mainEntityOfPage:`https://sports-rewritten.vercel.app${articleHref(article.sport,article.slug)}`,
+    mainEntityOfPage:`https://sportsrewritten.com${articleHref(article.sport,article.slug)}`,
     isAccessibleForFree:article.access_level==="free",
     hasPart:sectionMeta.filter(s=>s.is_premium).map((s,index)=>({"@type":"WebPageElement",isAccessibleForFree:false,cssSelector:`#${sectionAnchor(s,index)}`}))
   };
