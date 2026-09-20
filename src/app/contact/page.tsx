@@ -21,7 +21,7 @@ export default function ContactPage() {
         <ContactForm />
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:18,marginTop:30}}>
           <section style={{border:"1px solid rgba(255,255,255,.13)",padding:22,background:"#11181b"}}><h2>Reader & billing help</h2><p style={{color:"#aeb7bb",lineHeight:1.6}}>Sign in to view membership status or open Stripe's secure billing portal.</p><Link className="outlineButton" href="/membership">Membership</Link></section>
-          <section style={{border:"1px solid rgba(255,255,255,.13)",padding:22,background:"#11181b"}}><h2>Contributors</h2><p style={{color:"#aeb7bb",lineHeight:1.6}}>Contributor applications and approved contributor work are handled through the Contributor Studio.</p><Link className="outlineButton" href="/studio">Contributor Studio</Link></section>
+          <section style={{border:"1px solid rgba(255,255,255,.13)",padding:22,background:"#11181b"}}><h2>Contributors</h2><p style={{color:"#aeb7bb",lineHeight:1.6}}>Contributor applications and approved contributor work are handled through the Contributor Studio.</p><Link className="outlineButton" href="/studio">Contributor Studio</Link></section><section style={{border:"1px solid rgba(255,255,255,.13)",padding:22,background:"#11181b"}}><h2>Email Sports Rewritten</h2><p style={{color:"#aeb7bb",lineHeight:1.6}}>For anything that does not fit the options above, contact the Sports Rewritten team directly.</p><a className="outlineButton" href="mailto:sportsrewritten1@gmail.com">sportsrewritten1@gmail.com</a></section>
         </div>
       </main>
       <Footer />
