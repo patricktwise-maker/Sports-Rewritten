@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Header } from "@/components/Header";
+import { MemberPoll } from "@/components/MemberPoll";
 import { Footer } from "@/components/Footer";
 import { articles as prototypeArticles, sports } from "@/lib/content";
 import { articleHref, createPublicSupabaseClient, sportSlug } from "@/lib/supabase-public";
@@ -12,6 +13,12 @@ type PublishedArticle = {
   estimated_read_time:number|null; featured:boolean; published_at:string|null; hero_image_url:string|null;
 };
 
+async function getMembershipOffer(){
+  const supabase=createPublicSupabaseClient();
+  const {data}=await supabase.rpc("get_membership_offer");
+  return (data??{founding_count:0,founding_limit:250,founding_available:true,active_plan:"founding"}) as {founding_count:number;founding_limit:number;founding_available:boolean;active_plan:"founding"|"all_access"};
+}
+
 async function getPublishedArticles() {
   const supabase = createPublicSupabaseClient();
   const { data } = await supabase.from("articles")
@@ -23,7 +30,7 @@ async function getPublishedArticles() {
 }
 
 export default async function Home() {
-  const published = await getPublishedArticles();
+  const [published,offer] = await Promise.all([getPublishedArticles(),getMembershipOffer()]);
   const featured = published.find((a) => a.featured) ?? published[0] ?? null;
   const latest = featured ? published.filter((a) => a.id !== featured.id).slice(0,5) : [];
   const hasLiveStories = published.length > 0;
@@ -54,12 +61,7 @@ export default async function Home() {
             </div>
           </div>
           <aside className="heroRail">
-            <div className="panel pollPanel">
-              <p className="goldKicker">THE NEXT TIMELINE</p><h2>What should we rewrite next?</h2>
-              {['What if the Bulls drafted Melo?','What if Bo Jackson never got hurt?','What if Alabama never hired Saban?','What if Seattle kept Griffey?'].map((x) => <label className="pollOption" key={x}><input type="radio" name="poll"/> <span>{x}</span></label>)}
-              <button className="redButton full" type="button">Vote Now</button>
-            </div>
-            <div className="panel dynasty"><p className="goldKicker">FROM THE MULTIVERSE</p><h2>DYNASTY<br/>ARCHITECT</h2><p>Read the timeline. Then build your own.</p><span className="goldButton" aria-disabled="true">Game Coming Soon</span></div>
+            <MemberPoll />
           </aside>
         </section>
 
@@ -75,7 +77,7 @@ export default async function Home() {
 
         <section id="vault" className="vault shell"><div><p className="eyebrow">THE VAULT</p><h2>ONE CHANGE.<br/><span>AN ENTIRE SPORTS WORLD MOVES.</span></h2><p>Every Sports Rewritten feature joins a growing archive of alternate drafts, careers, dynasties, recruiting decisions, injuries, trades, free agency moves, life decisions, and era shifts.</p></div><Link className="outlineButton" href="/vault">Enter the Vault →</Link></section>
 
-        <section id="membership" className="membership shell"><div><p className="goldKicker">MEMBERSHIP</p><h2>ENTER THE SPORTS MULTIVERSE.</h2><p>Full premium archive, weekly timelines, member voting, and founding-member access.</p></div><div className="priceBox"><span>Founding members</span><strong>$2.99<small>/month</small></strong><Link className="goldButton" href="/membership">Become a Founding Member</Link></div></section>
+        <section id="membership" className="membership shell"><div><p className="goldKicker">MEMBERSHIP</p><h2>ENTER THE SPORTS MULTIVERSE.</h2><p>Full premium archive, weekly timelines, and member voting.</p></div><div className="priceBox"><span>{offer.founding_available?`Founding members · ${offer.founding_count}/${offer.founding_limit} claimed`:"Sports Rewritten membership"}</span><strong>{offer.founding_available?"$2.99":"$4.99"}<small>/month</small></strong><Link className="goldButton" href="/membership">{offer.founding_available?"Become a Founding Member":"Join Sports Rewritten"}</Link></div></section>
       </main>
       <Footer />
     </>
