@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { getStripe, stripePlans, type StripePlanCode } from "@/lib/stripe-server";
 
@@ -17,6 +18,27 @@ export async function POST(request: Request) {
 
     const { plan } = await request.json() as { plan?: StripePlanCode };
     if (!plan || !(plan in stripePlans)) return NextResponse.json({ error: "Unknown membership plan." }, { status: 400 });
+    if (plan === "annual") return NextResponse.json({ error: "That membership option is not currently available." }, { status: 400 });
+
+    const publicUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const publicKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+    if (!publicUrl || !publicKey) return NextResponse.json({ error: "Membership configuration is unavailable." }, { status: 503 });
+
+    const memberSupabase = createClient(publicUrl, publicKey, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    });
+
+    const { data: offer } = await memberSupabase.rpc("get_membership_offer");
+    const foundingAvailable = Boolean((offer as any)?.founding_available);
+
+    if (plan === "founding") {
+      if (!foundingAvailable) return NextResponse.json({ error: "Founding memberships are sold out. The current membership is $4.99/month." }, { status: 409 });
+      const { data: reserved, error: reserveError } = await memberSupabase.rpc("reserve_founding_slot");
+      if (reserveError || reserved !== true) return NextResponse.json({ error: "The final founding memberships were just claimed. Please refresh to see the current plan." }, { status: 409 });
+    } else if (plan === "all_access" && foundingAvailable) {
+      return NextResponse.json({ error: "The $4.99 membership opens after the 250 founding memberships are claimed." }, { status: 409 });
+    }
 
     const { data: existing } = await supabase
       .from("subscriptions")
@@ -28,8 +50,15 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     const stripe = getStripe();
+    const stillActive = existing && ["active","trialing"].includes(existing.status) && (!existing.current_period_end || new Date(existing.current_period_end).getTime() > Date.now());
+    if (stillActive) {
+      return NextResponse.json({ error: "This account already has an active membership. Use Manage Billing below." }, { status: 409 });
+    }
+
     const customerId = existing?.provider_customer_id || undefined;
-    const session = await stripe.checkout.sessions.create({
+    let session;
+    try {
+      session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
       customer_email: customerId ? undefined : user.email || undefined,
@@ -40,7 +69,13 @@ export async function POST(request: Request) {
       cancel_url: `${SITE_URL}/membership?checkout=canceled`,
       metadata: { user_id: user.id, plan_code: plan },
       subscription_data: { metadata: { user_id: user.id, plan_code: plan } },
-    });
+      });
+    } catch (stripeError) {
+      if (plan === "founding") {
+        await supabase.rpc("release_founding_slot", { target_user_id: user.id });
+      }
+      throw stripeError;
+    }
 
     return NextResponse.json({ url: session.url });
   } catch (error) {
