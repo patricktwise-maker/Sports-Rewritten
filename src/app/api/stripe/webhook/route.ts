@@ -35,6 +35,11 @@ async function syncSubscription(subscription: Stripe.Subscription) {
     .from("subscriptions")
     .upsert(payload, { onConflict: "provider_subscription_id" });
   if (error) throw error;
+
+  if (planCode === "founding" && ["active","trialing"].includes(subscription.status)) {
+    const { error: claimError } = await supabase.rpc("claim_founding_slot", { target_user_id: userId });
+    if (claimError) throw claimError;
+  }
 }
 
 export async function POST(request: Request) {
