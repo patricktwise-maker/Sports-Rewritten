@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/Header";
@@ -8,6 +9,17 @@ import { articleHref, createPublicSupabaseClient, sportSlug } from "@/lib/supaba
 export const dynamic = "force-dynamic";
 
 type Article = { id:string; title:string; slug:string; subtitle:string|null; excerpt:string|null; sport:string; scenario_type:string; hero_image_url:string|null; estimated_read_time:number|null; published_at:string|null };
+
+export async function generateMetadata({params}:{params:Promise<{sport:string}>}):Promise<Metadata>{
+  const {sport:slug}=await params;
+  const sport=sports.find(s=>sportSlug(s)===slug);
+  if(!sport) return {};
+  return {
+    title:`${sport} Alternate History`,
+    description:`Browse Sports Rewritten alternate-history timelines for ${sport}.`,
+    alternates:{canonical:`https://sportsrewritten.com/${slug}`},
+  };
+}
 
 export default async function SportArchivePage({params}:{params:Promise<{sport:string}>}) {
   const {sport:slug}=await params;
@@ -21,7 +33,7 @@ export default async function SportArchivePage({params}:{params:Promise<{sport:s
     <p style={{maxWidth:720,color:"#aeb7bb",lineHeight:1.7}}>Alternate histories, draft ripples, career rewrites and championship timelines from the {sport} multiverse.</p>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:20,marginTop:34}}>
       {articles.map(a=><article key={a.id} style={{border:"1px solid rgba(255,255,255,.12)",background:"#11181b",padding:20}}>
-        {a.hero_image_url&&<img src={a.hero_image_url} alt="" style={{width:"100%",aspectRatio:"16/9",objectFit:"cover",marginBottom:16}}/>}
+        {a.hero_image_url&&<img src={a.hero_image_url} alt={a.title} style={{width:"100%",aspectRatio:"16/9",objectFit:"cover",marginBottom:16}}/>}
         <p className="goldKicker">{a.scenario_type}</p><h2 style={{margin:"8px 0 10px"}}><Link href={articleHref(a.sport,a.slug)}>{a.title}</Link></h2>
         <p style={{color:"#aeb7bb",lineHeight:1.65}}>{a.excerpt||a.subtitle}</p><small style={{color:"#7f8a8f"}}>{a.estimated_read_time?`${a.estimated_read_time} min read`:"Sports Rewritten"}</small>
       </article>)}
