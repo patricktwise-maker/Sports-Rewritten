@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -5,10 +6,23 @@ import { articleHref, createPublicSupabaseClient } from "@/lib/supabase-public";
 
 export const dynamic = "force-dynamic";
 
+export const metadata: Metadata = {
+  title:"Search",
+  description:"Search published Sports Rewritten timelines by player, team, sport, or scenario.",
+  alternates:{canonical:"https://sportsrewritten.com/search"},
+  robots:{index:false,follow:true},
+};
+
 type Article={id:string;title:string;slug:string;subtitle:string|null;excerpt:string|null;sport:string;scenario_type:string;estimated_read_time:number|null};
 
+function sanitizeSearchTerm(value:string){
+ return value.replace(/[,%()]/g," ").replace(/\s+/g," ").trim();
+}
+
 export default async function SearchPage({searchParams}:{searchParams:Promise<{q?:string}>}){
- const {q=""}=await searchParams; const term=q.trim(); const supabase=createPublicSupabaseClient();
+ const {q=""}=await searchParams;
+ const term=sanitizeSearchTerm(q);
+ const supabase=createPublicSupabaseClient();
  let query=supabase.from("articles").select("id,title,slug,subtitle,excerpt,sport,scenario_type,estimated_read_time").eq("status","published").order("published_at",{ascending:false});
  if(term) query=query.or(`title.ilike.%${term}%,subtitle.ilike.%${term}%,excerpt.ilike.%${term}%,sport.ilike.%${term}%,scenario_type.ilike.%${term}%`);
  const {data}=await query.limit(40); const articles=(data??[]) as Article[];
