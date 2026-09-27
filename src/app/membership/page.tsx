@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { createPublicSupabaseClient } from "@/lib/supabase-public";
@@ -6,6 +7,12 @@ import { CheckoutButton } from "./CheckoutButton";
 
 export const dynamic="force-dynamic";
 export const revalidate=0;
+
+export const metadata: Metadata = {
+ title:"Membership",
+ description:"Join Sports Rewritten to unlock premium alternate-sports timelines and member features.",
+ alternates:{canonical:"https://sportsrewritten.com/membership"},
+};
 
 type Offer={founding_count:number;founding_limit:number;founding_available:boolean;active_plan:"founding"|"all_access"};
 

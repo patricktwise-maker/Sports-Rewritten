@@ -14,7 +14,6 @@ export function Header() {
         <div className="headerActions">
           <Link className="searchButton" href="/search" aria-label="Search">⌕ <span>Search</span></Link>
           <Link href="/studio" className="signIn">Contributor Studio</Link>
-          <Link href="/admin" className="signIn">Editorial Dashboard</Link>
           <Link href="/membership" className="goldButton">Subscribe</Link>
         </div>
       </div>
