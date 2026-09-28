@@ -12,7 +12,7 @@ import styles from "./article.module.css";
 type Article = {
   id:string; title:string; slug:string; subtitle:string|null; excerpt:string|null; sport:string; scenario_type:string;
   hero_image_url:string|null; hero_image_alt:string|null; estimated_read_time:number|null; seo_title:string|null;
-  seo_description:string|null; author_name:string|null; published_at:string|null; access_level:"free"|"premium";
+  seo_description:string|null; author_name:string|null; published_at:string|null; updated_at:string|null; access_level:"free"|"premium";
 };
 type SectionMeta = { id:string; heading:string; is_premium:boolean; display_order:number; section_type:string };
 type SectionBody = SectionMeta & { body:string; image_url:string|null; image_alt:string|null; image_caption:string|null };
@@ -23,7 +23,7 @@ type ArticleTagLink={tags:ArticleTag|ArticleTag[]|null};
 async function getArticle(slug:string) {
   const supabase = createPublicSupabaseClient();
   const { data } = await supabase.from("articles")
-    .select("id,title,slug,subtitle,excerpt,sport,scenario_type,hero_image_url,hero_image_alt,estimated_read_time,seo_title,seo_description,author_name,published_at,access_level")
+    .select("id,title,slug,subtitle,excerpt,sport,scenario_type,hero_image_url,hero_image_alt,estimated_read_time,seo_title,seo_description,author_name,published_at,updated_at,access_level")
     .eq("slug", slug).eq("status", "published").maybeSingle();
   return data as Article | null;
 }
@@ -105,8 +105,10 @@ export default async function PublishedArticlePage({ params }:{ params:Promise<{
     "@type":"Article",
     headline:article.title,
     description:article.seo_description||article.excerpt||undefined,
-    author:{"@type":"Person",name:article.author_name||"Sports Rewritten"},
+    author:article.author_name==="Patrick Wise"?{"@type":"Person","@id":"https://sportsrewritten.com/authors/patrick-wise#person",name:"Patrick Wise",url:"https://sportsrewritten.com/authors/patrick-wise"}:{"@type":"Organization","@id":"https://sportsrewritten.com/#organization",name:"Sports Rewritten"},
+    publisher:{"@type":"Organization","@id":"https://sportsrewritten.com/#organization",name:"Sports Rewritten",url:"https://sportsrewritten.com"},
     datePublished:article.published_at||undefined,
+    dateModified:article.updated_at||article.published_at||undefined,
     image:article.hero_image_url||undefined,
     keywords:articleTags.map(tag=>tag.name).join(", "),
     mainEntityOfPage:`https://sportsrewritten.com${articleHref(article.sport,article.slug)}`,
@@ -114,16 +116,27 @@ export default async function PublishedArticlePage({ params }:{ params:Promise<{
     hasPart:sectionMeta.filter(s=>s.is_premium).map((s,index)=>({"@type":"WebPageElement",isAccessibleForFree:false,cssSelector:`#${sectionAnchor(s,index)}`}))
   };
 
+  const breadcrumbJsonLd={
+    "@context":"https://schema.org",
+    "@type":"BreadcrumbList",
+    itemListElement:[
+      {"@type":"ListItem",position:1,name:"Sports Rewritten",item:"https://sportsrewritten.com"},
+      {"@type":"ListItem",position:2,name:article.sport,item:`https://sportsrewritten.com/${sportSlug(article.sport)}`},
+      {"@type":"ListItem",position:3,name:article.title,item:`https://sportsrewritten.com${articleHref(article.sport,article.slug)}`}
+    ]
+  };
+
   return <>
     <Header />
     <main className={`shell ${styles.articleShell}`}>
       <script type="application/ld+json" dangerouslySetInnerHTML={{__html:JSON.stringify(jsonLd)}} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{__html:JSON.stringify(breadcrumbJsonLd)}} />
       <header className={styles.hero}>
         <p className={styles.eyebrow}>{article.sport} · {article.scenario_type}</p>
         <h1 className={styles.title}>{article.title}</h1>
         {article.subtitle && <p className={styles.subtitle}>{article.subtitle}</p>}
         <div className={styles.meta}>
-          <span>By {article.author_name || "Sports Rewritten"}</span>
+          <span>By {article.author_name==="Patrick Wise"?<Link href="/authors/patrick-wise">Patrick Wise</Link>:(article.author_name || "Sports Rewritten")}</span>
           {article.estimated_read_time && <span>{article.estimated_read_time} min read</span>}
           <span>{article.access_level==="premium"?"Premium Feature":"Free Feature"}</span>
           {article.published_at && <span>{new Date(article.published_at).toLocaleDateString("en-US", { year:"numeric", month:"long", day:"numeric" })}</span>}
