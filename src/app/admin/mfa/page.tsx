@@ -1,0 +1,201 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { supabase } from "@/lib/supabase-browser";
+
+type Stage = "checking" | "signedout" | "denied" | "ready" | "enrolling" | "challenge" | "complete";
+
+export default function NewsroomMfaPage(){
+  const [stage,setStage]=useState<Stage>("checking");
+  const [factorId,setFactorId]=useState("");
+  const [qr,setQr]=useState("");
+  const [secret,setSecret]=useState("");
+  const [code,setCode]=useState("");
+  const [message,setMessage]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [name,setName]=useState("Newsroom staff");
+
+  const codeClean=useMemo(()=>code.replace(/\s+/g,""),[code]);
+
+  useEffect(()=>{void inspect();},[]);
+
+  async function inspect(){
+    setStage("checking");
+    setMessage("");
+
+    const {data:{user}}=await supabase.auth.getUser();
+    if(!user){
+      setStage("signedout");
+      return;
+    }
+
+    const {data:profile}=await supabase
+      .from("profiles")
+      .select("display_name,role,is_active,application_status")
+      .eq("id",user.id)
+      .maybeSingle();
+
+    const isStaff=Boolean(
+      profile?.is_active &&
+      profile?.application_status==="approved" &&
+      (profile?.role==="admin" || profile?.role==="editor")
+    );
+
+    if(!isStaff){
+      setStage("denied");
+      return;
+    }
+
+    setName(profile?.display_name||"Newsroom staff");
+
+    const {data:aal}=await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if(aal?.currentLevel==="aal2"){
+      setStage("complete");
+      return;
+    }
+
+    const {data:factors,error}=await supabase.auth.mfa.listFactors();
+    if(error){
+      setMessage(error.message);
+      setStage("ready");
+      return;
+    }
+
+    const verified=factors?.totp?.find(factor=>factor.status==="verified");
+    if(verified){
+      setFactorId(verified.id);
+      setStage("challenge");
+    }else{
+      setStage("ready");
+    }
+  }
+
+  async function startEnrollment(){
+    setBusy(true);
+    setMessage("");
+    const {data,error}=await supabase.auth.mfa.enroll({
+      factorType:"totp",
+      friendlyName:"Sports Rewritten Newsroom"
+    });
+    setBusy(false);
+
+    if(error){
+      setMessage(error.message);
+      return;
+    }
+
+    setFactorId(data.id);
+    setQr(data.totp.qr_code);
+    setSecret(data.totp.secret);
+    setStage("enrolling");
+  }
+
+  async function verify(){
+    if(!factorId || codeClean.length<6){
+      setMessage("Enter the current six-digit code from your authenticator app.");
+      return;
+    }
+
+    setBusy(true);
+    setMessage("");
+
+    const challenge=await supabase.auth.mfa.challenge({factorId});
+    if(challenge.error){
+      setBusy(false);
+      setMessage(challenge.error.message);
+      return;
+    }
+
+    const verifyResult=await supabase.auth.mfa.verify({
+      factorId,
+      challengeId:challenge.data.id,
+      code:codeClean
+    });
+
+    setBusy(false);
+
+    if(verifyResult.error){
+      setMessage(verifyResult.error.message);
+      return;
+    }
+
+    setCode("");
+    setStage("complete");
+    setMessage("MFA verified. Your newsroom session is now protected at AAL2.");
+  }
+
+  if(stage==="checking")return <main className="shell" style={{padding:"54px 0 80px"}}><p>Checking newsroom security…</p></main>;
+
+  if(stage==="signedout")return <main className="shell" style={{padding:"54px 0 80px"}}>
+    <p className="goldKicker">NEWSROOM SECURITY</p>
+    <h1>Sign in first</h1>
+    <p>Use the Editorial Dashboard to sign in with your newsroom account, then return here to complete MFA.</p>
+    <Link className="goldButton" href="/admin">Go to Editorial Dashboard</Link>
+  </main>;
+
+  if(stage==="denied")return <main className="shell" style={{padding:"54px 0 80px"}}>
+    <p className="goldKicker">NEWSROOM SECURITY</p>
+    <h1>Staff access required</h1>
+    <p>This MFA setup page is reserved for active Sports Rewritten administrators and editors.</p>
+    <Link className="outlineButton" href="/">Return Home</Link>
+  </main>;
+
+  if(stage==="complete")return <main className="shell" style={{padding:"54px 0 80px"}}>
+    <p className="goldKicker">NEWSROOM SECURITY</p>
+    <h1>MFA verified</h1>
+    <p>{message||"This session has completed multi-factor authentication."}</p>
+    <p style={{color:"#aeb7bb",maxWidth:760,lineHeight:1.65}}>
+      Supabase does not issue recovery codes for TOTP. After this first factor is working, add a second authenticator factor on a different device for backup.
+    </p>
+    <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+      <Link className="goldButton" href="/admin">Continue to Editorial Dashboard</Link>
+      <Link className="outlineButton" href="/admin/customers">Private Customers</Link>
+    </div>
+  </main>;
+
+  return <main className="shell" style={{padding:"54px 0 80px"}}>
+    <p className="goldKicker">NEWSROOM SECURITY</p>
+    <h1 style={{fontSize:"clamp(42px,7vw,72px)",margin:"8px 0 14px"}}>Secure Your Staff Account</h1>
+    <p style={{color:"#aeb7bb",maxWidth:760,lineHeight:1.65}}>
+      {name}, Sports Rewritten requires time-based one-time-password MFA for newsroom staff.
+    </p>
+
+    {stage==="ready"&&<section style={{border:"1px solid rgba(209,170,87,.38)",background:"#11181b",padding:24,maxWidth:720,marginTop:24}}>
+      <h2>Step 1: Add an authenticator</h2>
+      <p style={{color:"#aeb7bb",lineHeight:1.65}}>
+        Use Google Authenticator, Microsoft Authenticator, Authy, 1Password, Apple Passwords, or another TOTP-compatible app.
+      </p>
+      <button className="goldButton" type="button" disabled={busy} onClick={()=>void startEnrollment()}>
+        {busy?"Starting setup…":"Generate Authenticator QR Code"}
+      </button>
+    </section>}
+
+    {stage==="enrolling"&&<section style={{border:"1px solid rgba(209,170,87,.38)",background:"#11181b",padding:24,maxWidth:720,marginTop:24}}>
+      <h2>Step 2: Scan the QR code</h2>
+      <p style={{color:"#aeb7bb",lineHeight:1.65}}>Scan this code with your authenticator app, then enter the six-digit code it generates.</p>
+      {qr&&<img src={qr} alt="Sports Rewritten MFA QR code" style={{display:"block",width:220,maxWidth:"100%",background:"white",padding:12,margin:"18px 0"}}/>}
+      {secret&&<details style={{margin:"14px 0"}}><summary>Can’t scan the QR code?</summary><p>Manual setup key: <code>{secret}</code></p></details>}
+      <label style={{display:"grid",gap:6,maxWidth:320}}>Authenticator code
+        <input inputMode="numeric" autoComplete="one-time-code" value={code} onChange={e=>setCode(e.target.value)} maxLength={8} style={{padding:12,fontSize:18}}/>
+      </label>
+      <button className="goldButton" style={{marginTop:14}} type="button" disabled={busy} onClick={()=>void verify()}>
+        {busy?"Verifying…":"Enable MFA"}
+      </button>
+    </section>}
+
+    {stage==="challenge"&&<section style={{border:"1px solid rgba(209,170,87,.38)",background:"#11181b",padding:24,maxWidth:720,marginTop:24}}>
+      <h2>Verify your authenticator</h2>
+      <p style={{color:"#aeb7bb",lineHeight:1.65}}>Enter the current six-digit code from your authenticator app to unlock newsroom tools for this session.</p>
+      <label style={{display:"grid",gap:6,maxWidth:320}}>Authenticator code
+        <input inputMode="numeric" autoComplete="one-time-code" value={code} onChange={e=>setCode(e.target.value)} maxLength={8} style={{padding:12,fontSize:18}}/>
+      </label>
+      <button className="goldButton" style={{marginTop:14}} type="button" disabled={busy} onClick={()=>void verify()}>
+        {busy?"Verifying…":"Verify and Continue"}
+      </button>
+    </section>}
+
+    {message&&<p style={{marginTop:18,padding:12,border:"1px solid rgba(255,255,255,.14)"}}>{message}</p>}
+    <p style={{marginTop:24}}><Link href="/admin">← Editorial Dashboard</Link></p>
+  </main>;
+}
