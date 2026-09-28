@@ -40,9 +40,13 @@ export function StudioEditor(){
   setBusy(true); setMessage("Loading article…");
   const {data:a,error:aError}=await supabase.from("articles").select("id,title,slug,subtitle,excerpt,sport,scenario_type,hero_image_url,hero_image_alt,status,seo_title,seo_description,editor_notes,author_id").eq("id",articleId).maybeSingle();
   if(aError||!a){setMessage(aError?.message||"Article not found or you do not have permission to open it.");setBusy(false);setLoadedTarget(true);return}
-  const {data:s,error:sError}=await supabase.from("article_sections").select("id,heading,body,is_premium,display_order,image_url,image_alt,image_caption").eq("article_id",articleId).order("display_order",{ascending:true});
-  if(sError){setMessage(sError.message);setBusy(false);setLoadedTarget(true);return}
-  setDraft({articleId:a.id,title:a.title??"",subtitle:a.subtitle??"",slug:a.slug??"",sport:a.sport??"College Football",scenarioType:a.scenario_type??"Born in Another Era",tags:"",excerpt:a.excerpt??"",heroAlt:a.hero_image_alt??"",heroFileName:"",heroUrl:a.hero_image_url??undefined,seoTitle:a.seo_title??"",seoDescription:a.seo_description??"",editorFeedback:a.editor_notes??"",status:uiStatus(a.status),sections:(s??[]).map((x:any)=>({id:x.id,heading:x.heading??"",body:x.body??"",premium:!!x.is_premium,imageUrl:x.image_url??undefined,imageAlt:x.image_alt??"",imageCaption:x.image_caption??"",imageFileName:""}))});
+  const [{data:s,error:sError},{data:tagLinks,error:tagError}]=await Promise.all([
+   supabase.from("article_sections").select("id,heading,body,is_premium,display_order,image_url,image_alt,image_caption").eq("article_id",articleId).order("display_order",{ascending:true}),
+   supabase.from("article_tags").select("tags(name)").eq("article_id",articleId)
+  ]);
+  if(sError||tagError){setMessage((sError||tagError)?.message||"Unable to load article.");setBusy(false);setLoadedTarget(true);return}
+  const loadedTags=(tagLinks??[]).map((row:any)=>row.tags?.name).filter(Boolean).join(", ");
+  setDraft({articleId:a.id,title:a.title??"",subtitle:a.subtitle??"",slug:a.slug??"",sport:a.sport??"College Football",scenarioType:a.scenario_type??"Born in Another Era",tags:loadedTags,excerpt:a.excerpt??"",heroAlt:a.hero_image_alt??"",heroFileName:"",heroUrl:a.hero_image_url??undefined,seoTitle:a.seo_title??"",seoDescription:a.seo_description??"",editorFeedback:a.editor_notes??"",status:uiStatus(a.status),sections:(s??[]).map((x:any)=>({id:x.id,heading:x.heading??"",body:x.body??"",premium:!!x.is_premium,imageUrl:x.image_url??undefined,imageAlt:x.image_alt??"",imageCaption:x.image_caption??"",imageFileName:""}))});
   setHero(""); setHeroFile(null); setSectionImageFiles({}); setSectionImagePreviews({}); setSavedAt("cloud loaded"); setMessage(a.status==="changes_requested"&&a.editor_notes?"Revision requested. Review the editor feedback before resubmitting.":"Article loaded from Sports Rewritten cloud storage."); setBusy(false); setLoadedTarget(true);
  }
 
@@ -68,6 +72,9 @@ export function StudioEditor(){
    const {error:delErr}=await supabase.from("article_sections").delete().eq("article_id",articleId); if(delErr)throw delErr;
    const rows=await Promise.all(draft.sections.map(async(s,i)=>({article_id:articleId,heading:s.heading,body:s.body,is_premium:s.premium,display_order:i,section_type:"standard",image_url:await uploadSectionImage(articleId!,s,i),image_alt:s.imageAlt||null,image_caption:s.imageCaption||null})));
    if(rows.length){const {error}=await supabase.from("article_sections").insert(rows); if(error)throw error;}
+   const normalizedTags=Array.from(new Set(draft.tags.split(",").map(tag=>tag.trim()).filter(Boolean)));
+   const {error:tagSyncError}=await supabase.rpc("sync_article_tags",{target_article_id:articleId,tag_names:normalizedTags});
+   if(tagSyncError)throw tagSyncError;
    if(nextStatus==="in_review"){
     const {error}=await supabase.from("articles").update({status:"in_review",submitted_at:new Date().toISOString()}).eq("id",articleId); if(error)throw error;
    }
