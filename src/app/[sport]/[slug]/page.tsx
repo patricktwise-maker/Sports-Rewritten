@@ -17,6 +17,8 @@ type Article = {
 type SectionMeta = { id:string; heading:string; is_premium:boolean; display_order:number; section_type:string };
 type SectionBody = SectionMeta & { body:string; image_url:string|null; image_alt:string|null; image_caption:string|null };
 type Related={id:string;title:string;slug:string;sport:string;scenario_type:string;excerpt:string|null;estimated_read_time:number|null};
+type ArticleTag={name:string;slug:string};
+type ArticleTagLink={tags:ArticleTag|ArticleTag[]|null};
 
 async function getArticle(slug:string) {
   const supabase = createPublicSupabaseClient();
@@ -24,6 +26,18 @@ async function getArticle(slug:string) {
     .select("id,title,slug,subtitle,excerpt,sport,scenario_type,hero_image_url,hero_image_alt,estimated_read_time,seo_title,seo_description,author_name,published_at,access_level")
     .eq("slug", slug).eq("status", "published").maybeSingle();
   return data as Article | null;
+}
+
+function normalizeTags(rows:ArticleTagLink[]|null|undefined){
+  return (rows??[])
+    .flatMap(row=>Array.isArray(row.tags)?row.tags:(row.tags?[row.tags]:[]))
+    .filter((tag):tag is ArticleTag=>Boolean(tag?.name&&tag?.slug));
+}
+
+async function getArticleTags(articleId:string){
+  const supabase=createPublicSupabaseClient();
+  const {data}=await supabase.from("article_tags").select("tags(name,slug)").eq("article_id",articleId);
+  return normalizeTags(data as ArticleTagLink[]|null);
 }
 
 function sectionAnchor(section:SectionMeta,index:number){
@@ -35,10 +49,12 @@ export async function generateMetadata({ params }:{ params:Promise<{sport:string
   const { sport, slug } = await params;
   const article = await getArticle(slug);
   if (!article) return { title:"Article Not Found | Sports Rewritten" };
+  const tags=await getArticleTags(article.id);
   const canonical=`https://sportsrewritten.com/${sport}/${slug}`;
   return {
     title: article.seo_title || `${article.title} | Sports Rewritten`,
     description: article.seo_description || article.excerpt || undefined,
+    keywords: tags.map(tag=>tag.name),
     alternates:{canonical},
     openGraph: {
       url:canonical,
@@ -59,7 +75,7 @@ export default async function PublishedArticlePage({ params }:{ params:Promise<{
   const publicSupabase = createPublicSupabaseClient();
   const serverSupabase = createServerSupabaseClient();
 
-  const [{ data: freeSectionData },{ data: sectionMetaData },{data:relatedData}] = await Promise.all([
+  const [{ data: freeSectionData },{ data: sectionMetaData },{data:relatedData},{data:tagData}] = await Promise.all([
     publicSupabase.from("article_sections")
       .select("id,heading,body,is_premium,display_order,section_type,image_url,image_alt,image_caption")
       .eq("article_id", article.id)
@@ -74,12 +90,16 @@ export default async function PublishedArticlePage({ params }:{ params:Promise<{
       .eq("status","published")
       .neq("id",article.id)
       .order("published_at",{ascending:false})
-      .limit(3)
+      .limit(3),
+    publicSupabase.from("article_tags")
+      .select("tags(name,slug)")
+      .eq("article_id",article.id)
   ]);
 
   const freeSections = (freeSectionData ?? []) as SectionBody[];
   const sectionMeta = (sectionMetaData ?? []) as SectionMeta[];
   const related=(relatedData??[]) as Related[];
+  const articleTags=normalizeTags(tagData as ArticleTagLink[]|null);
   const jsonLd={
     "@context":"https://schema.org",
     "@type":"Article",
@@ -88,6 +108,7 @@ export default async function PublishedArticlePage({ params }:{ params:Promise<{
     author:{"@type":"Person",name:article.author_name||"Sports Rewritten"},
     datePublished:article.published_at||undefined,
     image:article.hero_image_url||undefined,
+    keywords:articleTags.map(tag=>tag.name).join(", "),
     mainEntityOfPage:`https://sportsrewritten.com${articleHref(article.sport,article.slug)}`,
     isAccessibleForFree:article.access_level==="free",
     hasPart:sectionMeta.filter(s=>s.is_premium).map((s,index)=>({"@type":"WebPageElement",isAccessibleForFree:false,cssSelector:`#${sectionAnchor(s,index)}`}))
@@ -110,6 +131,7 @@ export default async function PublishedArticlePage({ params }:{ params:Promise<{
         {article.hero_image_url && <img className={styles.heroImage} src={article.hero_image_url} alt={article.hero_image_alt || article.title}/>}
       </header>
       {article.excerpt && <p className={styles.excerpt}>{article.excerpt}</p>}
+      {articleTags.length>0&&<section aria-label="Article tags" style={{display:"flex",flexWrap:"wrap",gap:8,margin:"0 0 28px"}}>{articleTags.map(tag=><Link key={tag.slug} href={`/search?q=${encodeURIComponent(tag.name)}`} style={{fontSize:12,border:"1px solid rgba(209,170,87,.35)",padding:"6px 9px",color:"#d1aa57"}}>{tag.name}</Link>)}</section>}
       <div className={styles.articleLayout}>
         <aside className={styles.toc} aria-label="Article contents">
           <p>IN THIS TIMELINE</p>
