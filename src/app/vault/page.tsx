@@ -1,9 +1,16 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { articleHref, createPublicSupabaseClient } from "@/lib/supabase-public";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "The Vault | Sports Rewritten",
+  description: "Browse every Sports Rewritten alternate sports history timeline across the NFL, NBA, MLB, college sports, boxing, golf, and more.",
+  alternates:{canonical:"https://sportsrewritten.com/vault"},
+};
 
 type Article={id:string;title:string;slug:string;subtitle:string|null;excerpt:string|null;sport:string;scenario_type:string;estimated_read_time:number|null;published_at:string|null};
 
