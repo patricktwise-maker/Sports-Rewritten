@@ -9,6 +9,7 @@ type GateState = "checking" | "pass" | "enroll" | "challenge";
 export function StaffMfaGate({children}:{children:ReactNode}){
   const [state,setState]=useState<GateState>("checking");
   const [staffName,setStaffName]=useState("Newsroom staff");
+  const [staffSession,setStaffSession]=useState(false);
 
   useEffect(()=>{
     void sync();
@@ -38,10 +39,12 @@ export function StaffMfaGate({children}:{children:ReactNode}){
     );
 
     if(!isStaff){
+      setStaffSession(false);
       setState("pass");
       return;
     }
 
+    setStaffSession(true);
     setStaffName(profile?.display_name||"Newsroom staff");
 
     const {data:aal,error:aalError}=await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
@@ -59,6 +62,44 @@ export function StaffMfaGate({children}:{children:ReactNode}){
     const hasVerifiedTotp=Boolean(factors?.totp?.some(factor=>factor.status==="verified"));
     setState(hasVerifiedTotp?"challenge":"enroll");
   }
+
+
+  useEffect(()=>{
+    if(!staffSession)return;
+
+    const key="sports-rewritten-staff-last-activity";
+    const timeoutMs=30*60*1000;
+    let lastWrite=0;
+
+    const markActivity=()=>{
+      const now=Date.now();
+      if(now-lastWrite<15000)return;
+      lastWrite=now;
+      localStorage.setItem(key,String(now));
+    };
+
+    const checkIdle=async()=>{
+      const last=Number(localStorage.getItem(key)||Date.now());
+      if(Date.now()-last>timeoutMs){
+        localStorage.removeItem(key);
+        await supabase.auth.signOut();
+        location.href="/admin";
+      }
+    };
+
+    if(!localStorage.getItem(key))localStorage.setItem(key,String(Date.now()));
+
+    const events=["pointerdown","keydown","scroll","touchstart"];
+    events.forEach(event=>window.addEventListener(event,markActivity,{passive:true}));
+    const interval=window.setInterval(()=>void checkIdle(),60000);
+
+    void checkIdle();
+
+    return()=>{
+      events.forEach(event=>window.removeEventListener(event,markActivity));
+      window.clearInterval(interval);
+    };
+  },[staffSession]);
 
   if(state==="checking"){
     return <section className="shell" style={{padding:"28px 0 60px"}}>
