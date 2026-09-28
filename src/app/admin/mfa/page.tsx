@@ -5,6 +5,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase-browser";
 
 type Stage = "checking" | "signedout" | "denied" | "ready" | "enrolling" | "challenge" | "complete";
+type TotpFactor = { id:string; friendly_name?:string|null; status:string };
 
 export default function NewsroomMfaPage(){
   const [stage,setStage]=useState<Stage>("checking");
@@ -15,6 +16,8 @@ export default function NewsroomMfaPage(){
   const [message,setMessage]=useState("");
   const [busy,setBusy]=useState(false);
   const [name,setName]=useState("Newsroom staff");
+  const [factors,setFactors]=useState<TotpFactor[]>([]);
+  const [enrollmentName,setEnrollmentName]=useState("Sports Rewritten Newsroom");
 
   const codeClean=useMemo(()=>code.replace(/\s+/g,""),[code]);
 
@@ -50,11 +53,6 @@ export default function NewsroomMfaPage(){
     setName(profile?.display_name||"Newsroom staff");
 
     const {data:aal}=await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-    if(aal?.currentLevel==="aal2"){
-      setStage("complete");
-      return;
-    }
-
     const {data:factors,error}=await supabase.auth.mfa.listFactors();
     if(error){
       setMessage(error.message);
@@ -62,7 +60,15 @@ export default function NewsroomMfaPage(){
       return;
     }
 
-    const verified=factors?.totp?.find(factor=>factor.status==="verified");
+    const verifiedFactors=(factors?.totp??[]).filter(factor=>factor.status==="verified") as TotpFactor[];
+    setFactors(verifiedFactors);
+
+    if(aal?.currentLevel==="aal2"){
+      setStage("complete");
+      return;
+    }
+
+    const verified=verifiedFactors[0];
     if(verified){
       setFactorId(verified.id);
       setStage("challenge");
@@ -71,12 +77,13 @@ export default function NewsroomMfaPage(){
     }
   }
 
-  async function startEnrollment(){
+  async function startEnrollment(friendlyName="Sports Rewritten Newsroom"){
     setBusy(true);
+    setEnrollmentName(friendlyName);
     setMessage("");
     const {data,error}=await supabase.auth.mfa.enroll({
       factorType:"totp",
-      friendlyName:"Sports Rewritten Newsroom"
+      friendlyName
     });
     setBusy(false);
 
@@ -123,6 +130,32 @@ export default function NewsroomMfaPage(){
     setCode("");
     setStage("complete");
     setMessage("MFA verified. Your newsroom session is now protected at AAL2.");
+    const {data:freshFactors}=await supabase.auth.mfa.listFactors();
+    setFactors(((freshFactors?.totp??[]).filter(factor=>factor.status==="verified")) as TotpFactor[]);
+  }
+
+
+  async function removeFactor(target:TotpFactor){
+    if(factors.length<=1){
+      setMessage("Keep at least one verified authenticator on every newsroom staff account.");
+      return;
+    }
+
+    if(!window.confirm(`Remove ${target.friendly_name||"this authenticator"} from your newsroom account?`)) return;
+
+    setBusy(true);
+    setMessage("");
+    const {error}=await supabase.auth.mfa.unenroll({factorId:target.id});
+    setBusy(false);
+
+    if(error){
+      setMessage(error.message);
+      return;
+    }
+
+    const remaining=factors.filter(factor=>factor.id!==target.id);
+    setFactors(remaining);
+    setMessage("Authenticator removed. Your other verified factor remains active.");
   }
 
   if(stage==="checking")return <main className="shell" style={{padding:"54px 0 80px"}}><p>Checking newsroom security…</p></main>;
@@ -146,9 +179,23 @@ export default function NewsroomMfaPage(){
     <h1>MFA verified</h1>
     <p>{message||"This session has completed multi-factor authentication."}</p>
     <p style={{color:"#aeb7bb",maxWidth:760,lineHeight:1.65}}>
-      Supabase does not issue recovery codes for TOTP. After this first factor is working, add a second authenticator factor on a different device for backup.
+      Supabase does not issue recovery codes for TOTP. Keep a second verified authenticator on a different device as your backup.
     </p>
-    <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+
+    <section style={{display:"grid",gap:12,maxWidth:760,margin:"24px 0"}}>
+      {factors.map((factor,index)=><article key={factor.id} style={{border:"1px solid rgba(255,255,255,.14)",background:"#11181b",padding:18}}>
+        <p className="goldKicker">{index===0?"AUTHENTICATOR":"BACKUP AUTHENTICATOR"}</p>
+        <h3 style={{margin:"6px 0"}}>{factor.friendly_name||`Authenticator ${index+1}`}</h3>
+        <p style={{color:"#aeb7bb"}}>Status: {factor.status}</p>
+        {factors.length>1&&<button className="outlineButton" type="button" disabled={busy} onClick={()=>void removeFactor(factor)}>Remove Authenticator</button>}
+      </article>)}
+    </section>
+
+    {factors.length<2&&<button className="goldButton" type="button" disabled={busy} onClick={()=>void startEnrollment("Sports Rewritten Newsroom Backup")}>
+      {busy?"Starting setup…":"Add Backup Authenticator"}
+    </button>}
+
+    <div style={{display:"flex",gap:10,flexWrap:"wrap",marginTop:20}}>
       <Link className="goldButton" href="/admin">Continue to Editorial Dashboard</Link>
       <Link className="outlineButton" href="/admin/customers">Private Customers</Link>
     </div>
@@ -172,7 +219,7 @@ export default function NewsroomMfaPage(){
     </section>}
 
     {stage==="enrolling"&&<section style={{border:"1px solid rgba(209,170,87,.38)",background:"#11181b",padding:24,maxWidth:720,marginTop:24}}>
-      <h2>Step 2: Scan the QR code</h2>
+      <h2>Step 2: Scan the QR code</h2><p className="goldKicker">{enrollmentName}</p>
       <p style={{color:"#aeb7bb",lineHeight:1.65}}>Scan this code with your authenticator app, then enter the six-digit code it generates.</p>
       {qr&&<img src={qr} alt="Sports Rewritten MFA QR code" style={{display:"block",width:220,maxWidth:"100%",background:"white",padding:12,margin:"18px 0"}}/>}
       {secret&&<details style={{margin:"14px 0"}}><summary>Can’t scan the QR code?</summary><p>Manual setup key: <code>{secret}</code></p></details>}
