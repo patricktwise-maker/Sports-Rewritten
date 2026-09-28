@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { StudioEditor } from "./StudioEditor";
+import { StaffMfaGate } from "@/components/StaffMfaGate";
 
 export const metadata: Metadata = {
   title: "Contributor Studio | Sports Rewritten",
@@ -22,7 +23,7 @@ export default function StudioPage() {
             Build Sports Rewritten stories, organize the timeline, preview the reader experience, and submit drafts for editorial review.
           </p>
         </section>
-        <StudioEditor />
+        <StaffMfaGate><StudioEditor /></StaffMfaGate>
       </main>
       <Footer />
     </>
