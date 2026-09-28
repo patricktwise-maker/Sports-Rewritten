@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { AdminDashboard } from "./AdminDashboard";
+import { StaffMfaGate } from "@/components/StaffMfaGate";
 
 export const metadata: Metadata = {
   title: "Editorial Dashboard | Sports Rewritten",
@@ -22,7 +23,7 @@ export default function AdminPage() {
             Approve contributors, review submitted stories, request revisions, schedule publication, and manage the Sports Rewritten editorial pipeline.
           </p>
         </section>
-        <AdminDashboard />
+        <StaffMfaGate><AdminDashboard /></StaffMfaGate>
       </main>
       <Footer />
     </>
