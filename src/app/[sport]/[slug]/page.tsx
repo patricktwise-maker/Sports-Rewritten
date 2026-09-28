@@ -52,7 +52,7 @@ export async function generateMetadata({ params }:{ params:Promise<{sport:string
   const tags=await getArticleTags(article.id);
   const canonical=`https://sportsrewritten.com/${sport}/${slug}`;
   return {
-    title: article.seo_title || `${article.title} | Sports Rewritten`,
+    title: { absolute: article.seo_title || `${article.title} | Sports Rewritten` },
     description: article.seo_description || article.excerpt || undefined,
     keywords: tags.map(tag=>tag.name),
     alternates:{canonical},
@@ -88,6 +88,7 @@ export default async function PublishedArticlePage({ params }:{ params:Promise<{
     publicSupabase.from("articles")
       .select("id,title,slug,sport,scenario_type,excerpt,estimated_read_time")
       .eq("status","published")
+      .eq("sport",article.sport)
       .neq("id",article.id)
       .order("published_at",{ascending:false})
       .limit(3),
