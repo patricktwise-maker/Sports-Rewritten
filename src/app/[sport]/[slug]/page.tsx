@@ -145,7 +145,7 @@ export default async function PublishedArticlePage({ params }:{ params:Promise<{
         {article.hero_image_url && <img className={styles.heroImage} src={article.hero_image_url} alt={article.hero_image_alt || article.title}/>}
       </header>
       {article.excerpt && <p className={styles.excerpt}>{article.excerpt}</p>}
-      {articleTags.length>0&&<section aria-label="Article tags" style={{display:"flex",flexWrap:"wrap",gap:8,margin:"0 0 28px"}}>{articleTags.map(tag=><Link key={tag.slug} href={`/search?q=${encodeURIComponent(tag.name)}`} style={{fontSize:12,border:"1px solid rgba(209,170,87,.35)",padding:"6px 9px",color:"#d1aa57"}}>{tag.name}</Link>)}</section>}
+      {articleTags.length>0&&<section aria-label="Article tags" style={{display:"flex",flexWrap:"wrap",gap:8,margin:"0 0 28px"}}>{articleTags.map(tag=><Link key={tag.slug} href={`/topics/${tag.slug}`} style={{fontSize:12,border:"1px solid rgba(209,170,87,.35)",padding:"6px 9px",color:"#d1aa57"}}>{tag.name}</Link>)}</section>}
       <div className={styles.articleLayout}>
         <aside className={styles.toc} aria-label="Article contents">
           <p>IN THIS TIMELINE</p>
