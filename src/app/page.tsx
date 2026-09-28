@@ -15,8 +15,8 @@ type PublishedArticle = {
 
 async function getMembershipOffer(){
   const supabase=createPublicSupabaseClient();
-  const {data}=await supabase.rpc("get_membership_offer");
-  return (data??{founding_count:0,founding_limit:250,founding_available:true,active_plan:"founding"}) as {founding_count:number;founding_limit:number;founding_available:boolean;active_plan:"founding"|"all_access"};
+  const {data}=await supabase.rpc("get_public_membership_offer");
+  return (data??{founding_available:true,active_plan:"founding"}) as {founding_available:boolean;active_plan:"founding"|"all_access"};
 }
 
 async function getPublishedArticles() {
@@ -77,7 +77,7 @@ export default async function Home() {
 
         <section id="vault" className="vault shell"><div><p className="eyebrow">THE VAULT</p><h2>ONE CHANGE.<br/><span>AN ENTIRE SPORTS WORLD MOVES.</span></h2><p>Every Sports Rewritten feature joins a growing archive of alternate drafts, careers, dynasties, recruiting decisions, injuries, trades, free agency moves, life decisions, and era shifts.</p></div><Link className="outlineButton" href="/vault">Enter the Vault →</Link></section>
 
-        <section id="membership" className="membership shell"><div><p className="goldKicker">MEMBERSHIP</p><h2>ENTER THE SPORTS MULTIVERSE.</h2><p>Full premium archive, weekly timelines, and member voting.</p></div><div className="priceBox"><span>{offer.founding_available?`Founding members · ${offer.founding_count}/${offer.founding_limit} claimed`:"Sports Rewritten membership"}</span><strong>{offer.founding_available?"$2.99":"$4.99"}<small>/month</small></strong><Link className="goldButton" href="/membership">{offer.founding_available?"Become a Founding Member":"Join Sports Rewritten"}</Link></div></section>
+        <section id="membership" className="membership shell"><div><p className="goldKicker">MEMBERSHIP</p><h2>ENTER THE SPORTS MULTIVERSE.</h2><p>Full premium archive, weekly timelines, and member voting.</p></div><div className="priceBox"><span>{offer.founding_available?"Founding Member launch pricing":"Sports Rewritten membership"}</span><strong>{offer.founding_available?"$2.99":"$4.99"}<small>/month</small></strong><Link className="goldButton" href="/membership">{offer.founding_available?"Become a Founding Member":"Join Sports Rewritten"}</Link></div></section>
       </main>
       <Footer />
     </>
