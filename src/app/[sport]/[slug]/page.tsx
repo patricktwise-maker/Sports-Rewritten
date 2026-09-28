@@ -114,7 +114,7 @@ export default async function PublishedArticlePage({ params }:{ params:Promise<{
     keywords:articleTags.map(tag=>tag.name).join(", "),
     mainEntityOfPage:`https://sportsrewritten.com${articleHref(article.sport,article.slug)}`,
     isAccessibleForFree:article.access_level==="free",
-    hasPart:sectionMeta.filter(s=>s.is_premium).map((s,index)=>({"@type":"WebPageElement",isAccessibleForFree:false,cssSelector:`#${sectionAnchor(s,index)}`}))
+    hasPart:sectionMeta.some(s=>s.is_premium)?{"@type":"WebPageElement",isAccessibleForFree:false,cssSelector:".paywall"}:undefined
   };
 
   const breadcrumbJsonLd={
