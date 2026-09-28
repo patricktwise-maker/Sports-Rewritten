@@ -1,9 +1,16 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { articleHref, createPublicSupabaseClient } from "@/lib/supabase-public";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Search Sports Rewritten",
+  description: "Search Sports Rewritten alternate sports history timelines.",
+  robots: { index:false, follow:true },
+};
 
 type Article={
  id:string;
