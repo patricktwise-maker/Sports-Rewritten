@@ -132,7 +132,7 @@ export function ArticleSections({
           return (
             <section
               id={sectionAnchor(section, index)}
-              className={`${styles.section} ${typeClass} ${styles.lockedSection}`}
+              className={`${styles.section} ${typeClass} ${styles.lockedSection} paywall`}
               key={section.id}
             >
               <div className={styles.sectionNumber}>
