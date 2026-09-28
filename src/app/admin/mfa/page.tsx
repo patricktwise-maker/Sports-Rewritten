@@ -219,10 +219,10 @@ export default function NewsroomMfaPage(){
     </section>}
 
     {stage==="enrolling"&&<section style={{border:"1px solid rgba(209,170,87,.38)",background:"#11181b",padding:24,maxWidth:720,marginTop:24}}>
-      <h2>Step 2: Scan the QR code</h2><p className="goldKicker">{enrollmentName}</p>
-      <p style={{color:"#aeb7bb",lineHeight:1.65}}>Scan this code with your authenticator app, then enter the six-digit code it generates.</p>
-      {qr&&<img src={qr} alt="Sports Rewritten MFA QR code" style={{display:"block",width:220,maxWidth:"100%",background:"white",padding:12,margin:"18px 0"}}/>}
-      {secret&&<details style={{margin:"14px 0"}}><summary>Can’t scan the QR code?</summary><p>Manual setup key: <code>{secret}</code></p></details>}
+      <h2>Step 2: Add the setup key to your authenticator</h2><p className="goldKicker">{enrollmentName}</p>
+      <p style={{color:"#aeb7bb",lineHeight:1.65}}>In your authenticator app, choose the option to enter a setup key or secret manually. Use the key below. A QR code is available only as an optional alternative.</p>
+      {secret&&<div style={{margin:"18px 0",padding:16,border:"1px solid rgba(209,170,87,.38)",background:"#091013"}}><p style={{margin:"0 0 8px"}}><strong>Manual setup key</strong></p><code style={{display:"block",fontSize:18,wordBreak:"break-all",marginBottom:12}}>{secret}</code><button className="outlineButton" type="button" onClick={()=>void navigator.clipboard.writeText(secret)}>Copy Setup Key</button></div>}
+      {qr&&<details style={{margin:"14px 0"}}><summary>Optional: show QR code instead</summary><img src={qr} alt="Sports Rewritten MFA QR code" style={{display:"block",width:220,maxWidth:"100%",background:"white",padding:12,margin:"18px 0"}}/></details>}
       <label style={{display:"grid",gap:6,maxWidth:320}}>Authenticator code
         <input inputMode="numeric" autoComplete="one-time-code" value={code} onChange={e=>setCode(e.target.value)} maxLength={8} style={{padding:12,fontSize:18}}/>
       </label>
