@@ -77,7 +77,7 @@ export function AdminDashboard(){
  if(!me.is_active||!["admin","editor"].includes(me.role))return <section className={`shell ${styles.shell}`}><div className={styles.accessCard}><h2>Editorial access required</h2><p>This account is signed in, but Editorial Dashboard access is limited to Sports Rewritten editors and administrators.</p><p>Current role: <strong>{me.role}</strong></p><button className="outlineButton" onClick={()=>supabase.auth.signOut()}>Sign Out</button></div></section>;
 
  return <section className={`shell ${styles.shell}`}>
-  <div className={styles.topline}><div><strong>{me.display_name}</strong><span>{me.role}</span></div><div className={styles.quickLinks}><Link href="/studio">Write Article</Link><button type="button" onClick={()=>supabase.auth.signOut().then(()=>location.href="/admin")}>Sign Out</button></div></div>
+  <div className={styles.topline}><div><strong>{me.display_name}</strong><span>{me.role}</span></div><div className={styles.quickLinks}><Link href="/studio">Write Article</Link><Link href="/admin/customers">Customers</Link><button type="button" onClick={()=>supabase.auth.signOut().then(()=>location.href="/admin")}>Sign Out</button></div></div>
   {message&&<div className={styles.message}>{message}</div>}
   <div className={styles.stats}><div><span>{stats.pending}</span><small>Pending Contributors</small></div><div><span>{stats.review}</span><small>Articles In Review</small></div><div><span>{stats.comments}</span><small>Comments Pending</small></div><div><span>{stats.scheduled}</span><small>Scheduled</small></div><div><span>{stats.published}</span><small>Published</small></div></div>
 
