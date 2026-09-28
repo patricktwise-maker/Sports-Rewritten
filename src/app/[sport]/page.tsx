@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/Header";
@@ -6,6 +7,25 @@ import { sports } from "@/lib/content";
 import { articleHref, createPublicSupabaseClient, sportSlug } from "@/lib/supabase-public";
 
 export const dynamic = "force-dynamic";
+
+
+export async function generateMetadata({params}:{params:Promise<{sport:string}>}):Promise<Metadata>{
+  const {sport:slug}=await params;
+  const sport=sports.find(s=>sportSlug(s)===slug);
+  if(!sport)return {title:"Sports Archive | Sports Rewritten"};
+  const canonical=`https://sportsrewritten.com/${slug}`;
+  return {
+    title:`${sport} Alternate History | Sports Rewritten`,
+    description:`Explore research-driven ${sport} alternate histories, draft rewrites, career changes, dynasties, and what-if timelines from Sports Rewritten.`,
+    alternates:{canonical},
+    openGraph:{
+      title:`${sport} Alternate History | Sports Rewritten`,
+      description:`Explore research-driven ${sport} alternate histories and what-if timelines.`,
+      url:canonical,
+      type:"website"
+    }
+  };
+}
 
 type Article = { id:string; title:string; slug:string; subtitle:string|null; excerpt:string|null; sport:string; scenario_type:string; hero_image_url:string|null; estimated_read_time:number|null; published_at:string|null };
 
