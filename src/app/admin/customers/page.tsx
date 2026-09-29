@@ -50,14 +50,6 @@ export default function EditorCustomersPage(){
       return;
     }
 
-    const {data:aal}=await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-    if(aal?.currentLevel!=="aal2"){
-      setAllowed(false);
-      setMessage("Complete newsroom MFA before viewing private customer information.");
-      setLoading(false);
-      return;
-    }
-
     const {data:profile,error:profileError}=await supabase
       .from("profiles")
       .select("can_view_customer_data")
@@ -93,7 +85,7 @@ export default function EditorCustomersPage(){
     <p className="goldKicker">PRIVATE EDITOR ACCESS</p>
     <h1>Customer information is restricted.</h1>
     <p>{message||"This page is available only to the specifically authorized editorial account."}</p>
-    <div style={{display:"flex",gap:10,flexWrap:"wrap"}}><Link className="goldButton" href="/admin/mfa">Verify Newsroom MFA</Link><Link className="outlineButton" href="/admin">Return to Editorial Dashboard</Link></div>
+    <Link className="outlineButton" href="/admin">Return to Editorial Dashboard</Link>
   </main>;
 
   return <main className="shell" style={{padding:"54px 0 80px"}}>
