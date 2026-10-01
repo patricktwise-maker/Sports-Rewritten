@@ -48,41 +48,46 @@ export function StudioEditor(){
     return;
    }
 
-   const looksExisting=Boolean(data.user && Array.isArray(data.user.identities) && data.user.identities.length===0);
-
-   if(looksExisting){
-    const {error:signInError}=await supabase.auth.signInWithPassword({email,password});
-    if(signInError){
-     setAuthMode("signin");
-     setMessage("This email already has a Sports Rewritten account. Sign in with the existing password to manage or resubmit the contributor application. No new email confirmation is required.");
-     setBusy(false);
-     return;
-    }
-
-    setMessage("Existing account recognized. No new email confirmation is required.");
+   if(data.session){
+    const {error:requestError}=await supabase.rpc("request_contributor_access",{requested_display_name:displayName||null});
+    setMessage(requestError?requestError.message:"Contributor application submitted. Your account is already confirmed, so no new confirmation email is required.");
     setBusy(false);
     await syncSession();
     return;
    }
 
-   setMessage(data.session
-    ?"Account created. Contributor access remains pending until an editor approves your account."
-    :"Account created. Confirm your email once, then sign in. Contributor access remains pending until an editor approves your account.");
+   const {error:signInError}=await supabase.auth.signInWithPassword({email,password});
+   if(!signInError){
+    const {error:requestError}=await supabase.rpc("request_contributor_access",{requested_display_name:displayName||null});
+    setMessage(requestError?requestError.message:"Existing account recognized. Contributor application submitted with no new email confirmation required.");
+    setBusy(false);
+    await syncSession();
+    return;
+   }
+
+   setMessage("Account created. Confirm your email once, then sign in. Contributor access remains pending until an editor approves your account.");
   } else {
    const {error}=await supabase.auth.signInWithPassword({email,password});
-   setMessage(error?"Unable to sign in with those credentials.":"Signed in.");
+   if(error){
+    setMessage("Unable to sign in with those credentials.");
+    setBusy(false);
+    return;
+   }
+   setMessage("Signed in.");
   }
 
   setBusy(false);
   await syncSession();
  }
 
- async function resubmitApplication(){
+ async function requestContributorAccess(){
   setBusy(true);setMessage("");
-  const {error}=await supabase.rpc("resubmit_contributor_application");
+  const {error}=await supabase.rpc("request_contributor_access",{requested_display_name:displayName||profile?.display_name||null});
   setBusy(false);
   if(error){setMessage(error.message);return}
-  setMessage("Contributor application resubmitted. Your account remains confirmed, and no new confirmation email is required.");
+  setMessage(profile?.application_status==="declined"
+    ?"Contributor application resubmitted. No new confirmation email is required."
+    :"Contributor application submitted. No new confirmation email is required.");
   await syncSession();
  }
 
@@ -137,7 +142,8 @@ export function StudioEditor(){
  async function submit(){if(!draft.title.trim()||!draft.excerpt.trim()||draft.sections.some(s=>!s.body.trim())){setMessage("Add a headline, excerpt, and content to every section before submitting for review.");return} await saveCloud("in_review")}
 
  if(!userId)return <section className={`shell ${styles.studioShell}`}><div className={styles.authCard}><p className="goldKicker">CONTRIBUTOR ACCESS</p><h2>{authMode==="signin"?"Sign in to Contributor Studio":"Request contributor access"}</h2><p>Approved contributors can save cloud drafts, upload hero images, preview stories, and submit work for editorial review.</p><form onSubmit={handleAuth}>{authMode==="signup"&&<label>Display name<input value={displayName} onChange={e=>setDisplayName(e.target.value)} required/></label>}<label>Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required/></label><label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} minLength={8} required/></label><button className="redButton" disabled={busy}>{busy?"Working…":authMode==="signin"?"Sign In":"Create Account"}</button></form><button className={styles.textButton} type="button" onClick={()=>setAuthMode(authMode==="signin"?"signup":"signin")}>{authMode==="signin"?"Need contributor access? Create an account":"Already have an account? Sign in"}</button>{message&&<p className={styles.message}>{message}</p>}</div></section>;
- if(profile&&!profile.is_active)return <section className={`shell ${styles.studioShell}`}><div className={styles.authCard}><p className="goldKicker">ACCOUNT {profile.application_status==="declined"?"DECLINED":"PENDING"}</p><h2>{profile.application_status==="declined"?"Contributor access declined":"Contributor approval required"}</h2><p>{profile.application_status==="declined"?"Your account is still confirmed. You can resubmit your contributor application without creating a new account or verifying your email again.":"Your account exists, but an editor must approve it before you can save or submit Sports Rewritten articles."}</p>{profile.application_status==="declined"&&<button className="redButton" disabled={busy} onClick={()=>void resubmitApplication()}>{busy?"Resubmitting…":"Resubmit Contributor Application"}</button>}<button className="outlineButton" onClick={()=>supabase.auth.signOut()}>Sign Out</button>{message&&<p className={styles.message}>{message}</p>}</div></section>;
+ if(userId&&!profile)return <section className={`shell ${styles.studioShell}`}><div className={styles.authCard}><p className="goldKicker">CONTRIBUTOR ACCESS</p><h2>Request contributor access</h2><p>Your Sports Rewritten account is already confirmed. Submit a contributor application using this same account. No additional email confirmation is required.</p><label>Display name<input value={displayName} onChange={e=>setDisplayName(e.target.value)} placeholder="Your name" required/></label><button className="redButton" disabled={busy} onClick={()=>void requestContributorAccess()}>{busy?"Submitting…":"Submit Contributor Application"}</button><button className="outlineButton" onClick={()=>supabase.auth.signOut()}>Sign Out</button>{message&&<p className={styles.message}>{message}</p>}</div></section>;
+ if(profile&&!profile.is_active)return <section className={`shell ${styles.studioShell}`}><div className={styles.authCard}><p className="goldKicker">ACCOUNT {profile.application_status==="declined"?"DECLINED":"PENDING"}</p><h2>{profile.application_status==="declined"?"Contributor access declined":"Contributor approval required"}</h2><p>{profile.application_status==="declined"?"Your account is still confirmed. You can resubmit your contributor application without creating a new account or verifying your email again.":"Your account exists, but an editor must approve it before you can save or submit Sports Rewritten articles."}</p>{profile.application_status==="declined"&&<button className="redButton" disabled={busy} onClick={()=>void requestContributorAccess()}>{busy?"Resubmitting…":"Resubmit Contributor Application"}</button>}<button className="outlineButton" onClick={()=>supabase.auth.signOut()}>Sign Out</button>{message&&<p className={styles.message}>{message}</p>}</div></section>;
 
  return <section className={`shell ${styles.studioShell}`}>
   <div className={styles.statusBar}><div><span className={styles.status}>{draft.status}</span><span>{savedAt?`Saved ${savedAt}`:"Cloud save ready"}</span><span>{words} words</span><span>{Math.max(1,Math.ceil(words/225))} min read</span></div><p>{profile?.display_name} • {profile?.role}</p></div>{message&&<p className={styles.message}>{message}</p>}
