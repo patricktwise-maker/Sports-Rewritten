@@ -34,7 +34,48 @@ export function StudioEditor(){
  const canEdit=!!profile?.is_active&&(isStaff||!draft.articleId||draft.status==="Draft"||draft.status==="Changes Requested");
 
  async function syncSession(){ const {data:{user}}=await supabase.auth.getUser(); setUserId(user?.id??null); if(!user){setProfile(null);setLoadedTarget(false);return} const {data}=await supabase.from("profiles").select("id,display_name,role,is_active,application_status").eq("id",user.id).maybeSingle(); setProfile(data as Profile|null); }
- async function handleAuth(e:FormEvent){e.preventDefault();setBusy(true);setMessage(""); if(authMode==="signup"){const {error}=await supabase.auth.signUp({email,password,options:{data:{display_name:displayName}}}); setMessage(error?error.message:"Account created. Check your email if confirmation is required. Contributor access remains pending until an editor approves your account.");} else {const {error}=await supabase.auth.signInWithPassword({email,password}); setMessage(error?error.message:"Signed in.");} setBusy(false); await syncSession();}
+ async function handleAuth(e:FormEvent){
+  e.preventDefault();
+  setBusy(true);
+  setMessage("");
+
+  if(authMode==="signup"){
+   const {data,error}=await supabase.auth.signUp({email,password,options:{data:{display_name:displayName}}});
+
+   if(error){
+    setMessage(error.message);
+    setBusy(false);
+    return;
+   }
+
+   const looksExisting=Boolean(data.user && Array.isArray(data.user.identities) && data.user.identities.length===0);
+
+   if(looksExisting){
+    const {error:signInError}=await supabase.auth.signInWithPassword({email,password});
+    if(signInError){
+     setAuthMode("signin");
+     setMessage("This email already has a Sports Rewritten account. Sign in with the existing password to manage or resubmit the contributor application. No new email confirmation is required.");
+     setBusy(false);
+     return;
+    }
+
+    setMessage("Existing account recognized. No new email confirmation is required.");
+    setBusy(false);
+    await syncSession();
+    return;
+   }
+
+   setMessage(data.session
+    ?"Account created. Contributor access remains pending until an editor approves your account."
+    :"Account created. Confirm your email once, then sign in. Contributor access remains pending until an editor approves your account.");
+  } else {
+   const {error}=await supabase.auth.signInWithPassword({email,password});
+   setMessage(error?"Unable to sign in with those credentials.":"Signed in.");
+  }
+
+  setBusy(false);
+  await syncSession();
+ }
 
  async function resubmitApplication(){
   setBusy(true);setMessage("");
