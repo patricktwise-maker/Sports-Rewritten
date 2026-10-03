@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { createPublicSupabaseClient } from "@/lib/supabase-public";
+import { supabase } from "@/lib/supabase-browser";
 
 const VISITOR_KEY = "sports-rewritten-visitor-id";
 const SESSION_KEY = "sports-rewritten-session-id";
