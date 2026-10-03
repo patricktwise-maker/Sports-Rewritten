@@ -31,8 +31,7 @@ export async function POST(req:NextRequest){
         .from("reader_email_leads")
         .update({
           last_seen_at:new Date().toISOString(),
-          marketing_consent:Boolean(existing.marketing_consent)||marketingConsent,
-          google_sheet_synced_at:null
+          marketing_consent:Boolean(existing.marketing_consent)||marketingConsent
         })
         .eq("id",existing.id);
       if(error)throw error;
