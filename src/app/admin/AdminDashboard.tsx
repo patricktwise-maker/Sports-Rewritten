@@ -13,19 +13,21 @@ type Article = { id:string; author_id:string; title:string; slug:string; sport:s
 type CommentStatus = "pending"|"approved"|"declined";
 type Comment = { id:string; article_id:string; author_name:string; body:string; status:CommentStatus; created_at:string; moderated_at:string|null };
 type ReviewNote = Record<string,string>;
+type AnalyticsSummary = { page_views:number; unique_visitors:number; sessions:number; article_reads:number; unique_article_readers:number; avg_read_percent:number; avg_active_seconds:number; completed_reads:number };
+type ArticleAnalytics = { article_id:string; title:string; views:number; unique_readers:number; avg_read_percent:number; avg_active_seconds:number; completed_reads:number };
 
 const labels:Record<ArticleStatus,string>={draft:"Draft",in_review:"In Review",changes_requested:"Changes Requested",approved:"Approved",scheduled:"Scheduled",published:"Published",archived:"Archived"};
 
 export function AdminDashboard(){
  const [me,setMe]=useState<Profile|null>(null); const [profiles,setProfiles]=useState<Profile[]>([]); const [articles,setArticles]=useState<Article[]>([]); const [comments,setComments]=useState<Comment[]>([]);
  const [notes,setNotes]=useState<ReviewNote>({}); const [schedule,setSchedule]=useState<Record<string,string>>({}); const [message,setMessage]=useState(""); const [loading,setLoading]=useState(true); const [busyId,setBusyId]=useState<string|null>(null);
- const [email,setEmail]=useState(""); const [password,setPassword]=useState(""); const [authBusy,setAuthBusy]=useState(false);
+ const [email,setEmail]=useState(""); const [password,setPassword]=useState(""); const [authBusy,setAuthBusy]=useState(false); const [analytics,setAnalytics]=useState<AnalyticsSummary|null>(null); const [articleAnalytics,setArticleAnalytics]=useState<ArticleAnalytics[]>([]); const [analyticsDays,setAnalyticsDays]=useState(30);
  useEffect(()=>{void load(); const {data}=supabase.auth.onAuthStateChange(()=>{void load()}); return()=>data.subscription.unsubscribe()},[]);
 
  async function load(){
   setLoading(true); setMessage("");
   const {data:sessionData}=await supabase.auth.getSession(); const user=sessionData.session?.user??null;
-  if(!user){setMe(null);setProfiles([]);setArticles([]);setComments([]);setLoading(false);return}
+  if(!user){setMe(null);setProfiles([]);setArticles([]);setComments([]);setAnalytics(null);setArticleAnalytics([]);setLoading(false);return}
   const {data:mine,error:profileError}=await supabase.from("profiles").select("id,display_name,role,is_active,application_status,created_at").eq("id",user.id).maybeSingle();
   if(profileError){setMessage(profileError.message);setMe(null);setLoading(false);return}
   const mineProfile=mine as Profile|null; setMe(mineProfile);
@@ -36,8 +38,20 @@ export function AdminDashboard(){
    supabase.from("comments").select("id,article_id,author_name,body,status,created_at,moderated_at").order("created_at",{ascending:false})
   ]);
   const err=pRes.error||aRes.error||cRes.error; if(err)setMessage(err.message);
-  setProfiles((pRes.data??[]) as Profile[]); setArticles((aRes.data??[]) as Article[]); setComments((cRes.data??[]) as Comment[]); setLoading(false);
+  setProfiles((pRes.data??[]) as Profile[]); setArticles((aRes.data??[]) as Article[]); setComments((cRes.data??[]) as Comment[]);
+  if(mineProfile.role==="admin") await loadAnalytics(analyticsDays);
+  else {setAnalytics(null);setArticleAnalytics([])}
+  setLoading(false);
  }
+ async function loadAnalytics(days:number){
+  const [summaryRes,articlesRes]=await Promise.all([
+   supabase.rpc("admin_analytics_summary",{p_days:days}),
+   supabase.rpc("admin_article_analytics",{p_days:days})
+  ]);
+  if(summaryRes.error||articlesRes.error){setMessage(summaryRes.error?.message||articlesRes.error?.message||"Unable to load analytics.");return}
+  setAnalytics(summaryRes.data as AnalyticsSummary); setArticleAnalytics((articlesRes.data??[]) as ArticleAnalytics[]);
+ }
+ async function changeAnalyticsRange(days:number){setAnalyticsDays(days);await loadAnalytics(days)}
  async function signIn(e:FormEvent){e.preventDefault();setAuthBusy(true);setMessage("");const {error}=await supabase.auth.signInWithPassword({email,password});setAuthBusy(false);if(error){setMessage("Unable to sign in with those credentials.");return}setPassword("");await load()}
 
  const stats=useMemo(()=>({pending:profiles.filter(p=>p.application_status==="pending").length,review:articles.filter(a=>a.status==="in_review").length,comments:comments.filter(c=>c.status==="pending").length,scheduled:articles.filter(a=>a.status==="scheduled").length,published:articles.filter(a=>a.status==="published").length}),[profiles,articles,comments]);
@@ -80,6 +94,10 @@ export function AdminDashboard(){
   <div className={styles.topline}><div><strong>{me.display_name}</strong><span>{me.role}</span></div><div className={styles.quickLinks}><Link href="/studio">Write Article</Link><Link href="/admin/customers">Customers</Link><button type="button" onClick={()=>supabase.auth.signOut().then(()=>location.href="/admin")}>Sign Out</button></div></div>
   {message&&<div className={styles.message}>{message}</div>}
   <div className={styles.stats}><div><span>{stats.pending}</span><small>Pending Contributors</small></div><div><span>{stats.review}</span><small>Articles In Review</small></div><div><span>{stats.comments}</span><small>Comments Pending</small></div><div><span>{stats.scheduled}</span><small>Scheduled</small></div><div><span>{stats.published}</span><small>Published</small></div></div>
+
+  {me.role==="admin"&&<><div className={styles.sectionHeading}><div><p className="goldKicker">AUDIENCE</p><h2>Site Analytics</h2></div><div className={styles.quickLinks}><button className={analyticsDays===7?"":""} onClick={()=>void changeAnalyticsRange(7)}>7 Days</button><button className={analyticsDays===30?"":""} onClick={()=>void changeAnalyticsRange(30)}>30 Days</button><button className={analyticsDays===90?"":""} onClick={()=>void changeAnalyticsRange(90)}>90 Days</button><button className={analyticsDays===0?"":""} onClick={()=>void changeAnalyticsRange(0)}>All Time</button></div></div>
+  {analytics&&<div className={styles.stats}><div><span>{analytics.unique_visitors.toLocaleString()}</span><small>Unique Visitors</small></div><div><span>{analytics.page_views.toLocaleString()}</span><small>Page Views</small></div><div><span>{analytics.article_reads.toLocaleString()}</span><small>Article Reads</small></div><div><span>{Math.round(analytics.avg_read_percent)}%</span><small>Average Read</small></div><div><span>{Math.max(0,Math.round(analytics.avg_active_seconds/60))}m</span><small>Avg. Active Reading</small></div><div><span>{analytics.completed_reads.toLocaleString()}</span><small>Completed Reads</small></div></div>}
+  <div className={styles.articleList}><div className={styles.articleCard}><span>Article</span><span>Reads</span><span>Readers</span><span>Avg. Read</span><span>Avg. Time</span><span>Completed</span></div>{articleAnalytics.map(row=><div className={styles.articleCard} key={row.article_id}><strong>{row.title}</strong><span>{row.views}</span><span>{row.unique_readers}</span><span>{Math.round(row.avg_read_percent)}%</span><span>{Math.max(0,Math.round(row.avg_active_seconds/60))}m</span><span>{row.completed_reads}</span></div>)}{articleAnalytics.length===0&&<div className={styles.empty}>Analytics will populate as readers visit published articles.</div>}</div></>}
 
   <div className={styles.sectionHeading}><div><p className="goldKicker">PEOPLE</p><h2>Contributor Management</h2></div><p>{me.role==="admin"?"Approve or decline applications, change roles, deactivate access, or delete eligible profiles.":"Editors can view contributor status. Only administrators can change access."}</p></div>
   <div className={styles.peopleGrid}>{profiles.map(profile=>{const label=profileLabel(profile);return <article className={styles.personCard} key={profile.id}><div><h3>{profile.display_name}</h3><p>{profile.role}</p></div><span className={label==="Active"?styles.active:styles.pending}>{label}</span>{me.role==="admin"&&profile.id!==me.id&&<div className={styles.personActions}>{profile.application_status==="pending"&&<><button disabled={busyId===profile.id} onClick={()=>void manageProfile(profile,{is_active:true,application_status:"approved"},"Contributor approved.")}>Approve</button><button disabled={busyId===profile.id} onClick={()=>void manageProfile(profile,{is_active:false,application_status:"declined"},"Contributor application declined.")}>Decline</button></>}{profile.application_status==="declined"&&<button disabled={busyId===profile.id} onClick={()=>void manageProfile(profile,{is_active:true,application_status:"approved"},"Contributor approved.")}>Approve Instead</button>}{profile.application_status==="approved"&&profile.is_active&&<button disabled={busyId===profile.id} onClick={()=>void manageProfile(profile,{is_active:false},"Contributor deactivated.")}>Deactivate</button>}{profile.application_status==="approved"&&!profile.is_active&&<button disabled={busyId===profile.id} onClick={()=>void manageProfile(profile,{is_active:true},"Contributor reactivated.")}>Reactivate</button>}<select value={profile.role} disabled={busyId===profile.id} onChange={e=>void manageProfile(profile,{role:e.target.value as Profile["role"]},"Contributor role updated.")}><option value="contributor">Contributor</option><option value="editor">Editor</option><option value="admin">Admin</option></select><button disabled={busyId===profile.id} onClick={()=>void deleteProfile(profile)}>Delete Profile</button></div>}</article>})}</div>

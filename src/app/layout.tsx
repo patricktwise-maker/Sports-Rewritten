@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { SiteAnalytics } from "@/components/SiteAnalytics";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://sportsrewritten.com"),
@@ -43,5 +44,5 @@ const siteJsonLd = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body><script type="application/ld+json" dangerouslySetInnerHTML={{__html:JSON.stringify(siteJsonLd)}} />{children}</body></html>;
+  return <html lang="en"><body><script type="application/ld+json" dangerouslySetInnerHTML={{__html:JSON.stringify(siteJsonLd)}} /><SiteAnalytics />{children}</body></html>;
 }

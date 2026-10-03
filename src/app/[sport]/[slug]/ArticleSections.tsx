@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase-browser";
+import { ArticleEngagementTracker } from "@/components/ArticleEngagementTracker";
 import styles from "./article.module.css";
 
 type SectionMeta = {
@@ -113,6 +114,7 @@ export function ArticleSections({
 
   return (
     <article className={styles.story}>
+      <ArticleEngagementTracker articleId={articleId} sectionCount={sectionMeta.length} />
       {sectionMeta.map((section, index) => {
         const fullSection = sectionsById.get(section.id);
         const typeClass =
@@ -133,6 +135,7 @@ export function ArticleSections({
             <section
               id={sectionAnchor(section, index)}
               className={`${styles.section} ${typeClass} ${styles.lockedSection} paywall`}
+              data-analytics-readable="false"
               key={section.id}
             >
               <div className={styles.sectionNumber}>
@@ -175,6 +178,7 @@ export function ArticleSections({
           <section
             id={sectionAnchor(section, index)}
             className={`${styles.section} ${typeClass}`}
+            data-analytics-readable="true"
             key={section.id}
           >
             <div className={styles.sectionNumber}>
