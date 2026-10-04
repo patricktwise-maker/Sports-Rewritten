@@ -7,7 +7,6 @@ import { articleHref, createPublicSupabaseClient, sportSlug } from "@/lib/supaba
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { ArticleSections } from "./ArticleSections";
 import { CommentsSection } from "./CommentsSection";
-import { ArticleEmailGate } from "@/components/ArticleEmailGate";
 import styles from "./article.module.css";
 
 type Article = {
@@ -130,7 +129,7 @@ export default async function PublishedArticlePage({ params }:{ params:Promise<{
 
   return <>
     <Header />
-    <ArticleEmailGate articleId={article.id} articleTitle={article.title}><main className={`shell ${styles.articleShell}`}>
+    <main className={`shell ${styles.articleShell}`}>
       <script type="application/ld+json" dangerouslySetInnerHTML={{__html:JSON.stringify(jsonLd)}} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{__html:JSON.stringify(breadcrumbJsonLd)}} />
       <header className={styles.hero}>
@@ -162,7 +161,7 @@ export default async function PublishedArticlePage({ params }:{ params:Promise<{
       </section>
       {related.length>0&&<section style={{margin:"48px 0"}}><p className="goldKicker">MORE TIMELINES</p><h2 style={{fontSize:36,margin:"6px 0 18px"}}>Keep rewriting history</h2><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:16}}>{related.map(r=><article key={r.id} style={{border:"1px solid rgba(255,255,255,.12)",padding:18,background:"#11181b"}}><small style={{color:"#9ca7ab"}}>{r.sport} · {r.scenario_type}</small><h3><Link href={articleHref(r.sport,r.slug)}>{r.title}</Link></h3>{r.excerpt&&<p style={{color:"#aeb7bb",lineHeight:1.55}}>{r.excerpt}</p>}{r.estimated_read_time&&<small>{r.estimated_read_time} min read</small>}</article>)}</div></section>}
       <CommentsSection articleId={article.id}/>
-    </main></ArticleEmailGate>
+    </main>
     <Footer />
   </>;
 }
