@@ -6,6 +6,7 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://sportsrewritten.com"),
   title: { default: "Sports Rewritten | The Home of the Sports Multiverse", template: "%s | Sports Rewritten" },
   description: "Evidence-based alternate sports history, simulations, and long-form storytelling.",
+  other: { "p:domain_verify": "8dc9cd78cc5c2392a7d6f59de8fcfa61" },
   alternates: { canonical: "https://sportsrewritten.com" },
   openGraph: {
     title: "Sports Rewritten | The Home of the Sports Multiverse",
